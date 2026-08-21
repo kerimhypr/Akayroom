@@ -1,0 +1,23 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env (asla commitlenmez)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+realtime-signaling/logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+temp_clone/
+__pycache__/
