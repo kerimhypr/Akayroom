@@ -107,12 +107,12 @@ async function verifyToken(token) {
     throw new SignalingError(ErrorCodes.AUTH_TOKEN_INVALID, "Token header missing alg");
   }
 
-  // RS256 branch (Supabase new projects) – requires JWKS
-  if (header.alg === "RS256") {
+  // RS256 / ES256 branch (Supabase new projects) – requires JWKS
+  if (header.alg === "RS256" || header.alg === "ES256" || header.alg === "ES384" || header.alg === "ES512") {
     if (!config.auth.jwksUrl) {
       throw new SignalingError(
         ErrorCodes.AUTH_TOKEN_INVALID,
-        "RS256 token received but JWKS_URL not configured. Set JWKS_URL=https://<project>.supabase.co/auth/v1/.well-known/jwks.json or switch Supabase project to HS256",
+        `${header.alg} token received but JWKS_URL not configured. Set JWKS_URL=https://<project>.supabase.co/auth/v1/.well-known/jwks.json`,
       );
     }
     // Attempt JWKS verification if 'jose' is available; otherwise fail with instructions.
@@ -138,12 +138,12 @@ async function verifyToken(token) {
       if (e.code === "MODULE_NOT_FOUND" || e.message.includes("Cannot find module 'jose'")) {
         throw new SignalingError(
           ErrorCodes.AUTH_TOKEN_INVALID,
-          "RS256 verification requires 'jose' package. Run `npm install jose` and set JWKS_URL correctly.",
+          "JWKS verification requires 'jose' package. Run `npm install jose` and set JWKS_URL correctly.",
         );
       }
       // jwtVerify throws on invalid signature/exp
       if (e.code === "ERR_JWT_EXPIRED") throw new SignalingError(ErrorCodes.AUTH_TOKEN_EXPIRED, "Token expired");
-      throw new SignalingError(ErrorCodes.AUTH_TOKEN_INVALID, `RS256 verification failed: ${e.message}`);
+      throw new SignalingError(ErrorCodes.AUTH_TOKEN_INVALID, `JWKS verification failed: ${e.message}`);
     }
   }
 
