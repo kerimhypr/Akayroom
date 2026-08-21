@@ -4,7 +4,7 @@ const { z } = require("zod");
 const { SignalingError, ErrorCodes } = require("./errors");
 
 // ── Primitive schemas ──
-const roomIdSchema = z.string().min(1).max(64).regex(/^[a-zA-Z0-9_\-:.]+$/, "roomId may contain alphanumeric, _ - : .");
+const roomIdSchema = z.string().min(1).max(128).regex(/^[a-zA-Z0-9_\-:.]+$/, "roomId may contain alphanumeric, _ - : .");
 const peerIdSchema = z.string().min(1).max(64);
 const userIdSchema = z.string().min(1).max(128);
 const sdpSchema = z.string().min(1).max(20000);

@@ -55,7 +55,7 @@ function DrawerShell({
   )
 }
 
-export function MobileServerDrawer({ open, onClose, onCreate, onJoin }: { open: boolean; onClose: () => void; onCreate: () => void; onJoin: () => void }) {
+export function MobileServerDrawer({ open, onClose, onCreate, onJoin, onSelect }: { open: boolean; onClose: () => void; onCreate: () => void; onJoin: () => void; onSelect?: (tab: 'chat' | 'friends') => void }) {
   const { servers, currentServerId, setCurrentServer } = useServerStore()
   const { profile } = useAuthStore()
   return (
@@ -64,6 +64,7 @@ export function MobileServerDrawer({ open, onClose, onCreate, onJoin }: { open: 
         <button
           onClick={() => {
             setCurrentServer(null)
+            onSelect?.('friends')
             onClose()
           }}
           className={cn(
@@ -82,6 +83,7 @@ export function MobileServerDrawer({ open, onClose, onCreate, onJoin }: { open: 
               key={s.id}
               onClick={() => {
                 setCurrentServer(s.id)
+                onSelect?.('chat')
                 onClose()
               }}
               className={cn(
@@ -122,7 +124,7 @@ export function MobileServerDrawer({ open, onClose, onCreate, onJoin }: { open: 
   )
 }
 
-export function MobileChannelDrawer({ open, onClose, onCreateChannel }: { open: boolean; onClose: () => void; onCreateChannel: () => void }) {
+export function MobileChannelDrawer({ open, onClose, onCreateChannel, onSelect }: { open: boolean; onClose: () => void; onCreateChannel: () => void; onSelect?: (tab: 'chat' | 'voice') => void }) {
   const { servers, currentServerId, channels, currentChannelId, setCurrentChannel, members } = useServerStore()
   const { roomId, participants } = useVoiceStore()
   const server = servers.find((s) => s.id === currentServerId)
@@ -153,6 +155,7 @@ export function MobileChannelDrawer({ open, onClose, onCreateChannel }: { open: 
                 key={ch.id}
                 onClick={() => {
                   setCurrentChannel(ch.id)
+                  onSelect?.('chat')
                   onClose()
                 }}
                 className={cn(
@@ -182,6 +185,7 @@ export function MobileChannelDrawer({ open, onClose, onCreateChannel }: { open: 
                   <button
                     onClick={() => {
                       setCurrentChannel(ch.id)
+                      onSelect?.('voice')
                       onClose()
                     }}
                     className={cn(

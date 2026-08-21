@@ -18,7 +18,7 @@ import { ProfileSettings } from '@/components/settings/ProfileSettings'
 import type { Message } from '@/types/database'
 
 export function AppShell() {
-  const { currentServerId, currentChannelId, channels, servers } = useServerStore()
+  const { currentServerId, currentChannelId, channels, servers, setCurrentServer, setCurrentChannel } = useServerStore()
   const { fetchServers } = useServerStore()
   const { fetchMessages, sendMessage, subscribeChannel } = useMessageStore()
   const [showCreateServer, setShowCreateServer] = useState(false)
@@ -71,28 +71,29 @@ export function AppShell() {
 
   const handleMobileTab = (t: 'chat' | 'friends' | 'voice' | 'settings') => {
     setMobileTab(t)
-    if (t === 'friends') {
-      // keep server null view
-    } else if (t === 'chat') {
-      if (currentServerId && channel) setActiveView('chat')
-      else if (currentServerId) setActiveView('chat')
-      else setActiveView('friends')
-    } else if (t === 'settings') setActiveView('settings')
-    else if (t === 'voice' && isVoiceChannel) {
-      // already in voice channel, just show voice
+    if (t === 'friends' || t === 'settings') setActiveView(t)
+    else setActiveView('chat')
+    if (t === 'voice') {
+      const vc = channels.find((c) => c.type === 'voice')
+      if (vc && currentChannelId !== vc.id) setCurrentChannel(vc.id)
+    }
+    if (t === 'chat' && currentServerId && !channel) {
+      const tc = channels.find((c) => c.type === 'text')
+      if (tc) setCurrentChannel(tc.id)
     }
   }
 
   const renderMain = () => {
-    // Mobile tab overrides when on mobile
+    // Mobile tab overrides when on mobile — must be checked BEFORE server/channel
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
     const effectiveView = isMobile ? (mobileTab === 'friends' ? 'friends' : mobileTab === 'settings' ? 'settings' : mobileTab === 'voice' ? 'voice' : 'chat') : null
 
+    if (isMobile) {
+      if (effectiveView === 'friends') return <FriendsPanel />
+      if (effectiveView === 'settings') return <div className="flex-1 overflow-y-auto p-4 md:p-6"><ProfileSettings /></div>
+    }
+
     if (!currentServerId) {
-      if (isMobile) {
-        if (effectiveView === 'settings') return <div className="flex-1 overflow-y-auto p-4 md:p-6"><ProfileSettings /></div>
-        return <FriendsPanel />
-      }
       return activeView === 'settings' ? (
         <div className="flex-1 overflow-y-auto p-6"><ProfileSettings /></div>
       ) : (
@@ -212,8 +213,19 @@ export function AppShell() {
         <MobileBottomNav active={mobileTab} onChange={handleMobileTab} voiceActive={voice.status !== 'disconnected'} />
       </div>
 
-      <MobileServerDrawer open={showServerDrawer} onClose={() => setShowServerDrawer(false)} onCreate={() => setShowCreateServer(true)} onJoin={() => setShowJoinServer(true)} />
-      <MobileChannelDrawer open={showChannelDrawer} onClose={() => setShowChannelDrawer(false)} onCreateChannel={() => setShowCreateChannel(true)} />
+      <MobileServerDrawer
+        open={showServerDrawer}
+        onClose={() => setShowServerDrawer(false)}
+        onSelect={(t) => setMobileTab(t)}
+        onCreate={() => setShowCreateServer(true)}
+        onJoin={() => setShowJoinServer(true)}
+      />
+      <MobileChannelDrawer
+        open={showChannelDrawer}
+        onClose={() => setShowChannelDrawer(false)}
+        onSelect={(t) => setMobileTab(t)}
+        onCreateChannel={() => setShowCreateChannel(true)}
+      />
 
       <CreateServerModal open={showCreateServer} onClose={() => setShowCreateServer(false)} />
       <JoinServerModal open={showJoinServer} onClose={() => setShowJoinServer(false)} />
