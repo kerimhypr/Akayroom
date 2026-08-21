@@ -21,3 +21,13 @@ Thumbs.db
 # Temp
 temp_clone/
 __pycache__/
+
+# Supabase temp
+supabase/.temp/
+supabase/.branches/
+
+# TS build info
+*.tsbuildinfo
+
+# Frontend dist
+frontend/dist/
