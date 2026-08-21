@@ -11,8 +11,30 @@
 *::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 999px; }
 *::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
+html {
+  height: 100%;
+  /* Prevent horizontal overflow from 100vw + scrollbar */
+  overflow-x: hidden;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  /* Use dvh for mobile browser chrome, fallback to vh */
+  min-height: 100dvh;
+  /* Respect iOS safe areas */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-text-size-adjust: 100%;
+  /* Prevent pull-to-refresh conflicts inside chat scroll */
+  overscroll-behavior-y: contain;
+}
+
+/* Root fills viewport correctly on mobile */
+#root {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
