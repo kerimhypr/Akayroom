@@ -104,6 +104,7 @@ class Room {
       if (this.sfuRouter) {
         this.sfuRouter.removePeer(peerId);
       }
+      try { require("../media/trackManager").trackManager.removePeer(peerId); } catch {}
     }
     return p;
   }
@@ -119,6 +120,7 @@ class Room {
     if (age > config.rooms.reconnectWindowMs) {
       this.stale.delete(peerId);
       if (this.sfuRouter) this.sfuRouter.removePeer(peerId);
+      try { require("../media/trackManager").trackManager.removePeer(peerId); } catch {}
       return null;
     }
     const p = entry.participant;
@@ -157,6 +159,7 @@ class Room {
       if (now - entry.disconnectedAt > config.rooms.reconnectWindowMs) {
         this.stale.delete(peerId);
         if (this.sfuRouter) this.sfuRouter.removePeer(peerId);
+        try { require("../media/trackManager").trackManager.removePeer(peerId); } catch {}
         removed++;
         logger.info("stale participant expired", { roomId: this.roomId, peerId });
       }
