@@ -14,7 +14,7 @@ class RoomManager {
   }
 
   getOrCreateRoom(roomId, opts = {}) {
-    if (!roomId || typeof roomId !== "string" || roomId.length > 64) {
+    if (!roomId || typeof roomId !== "string" || roomId.length > 128) {
       throw new SignalingError(ErrorCodes.ROOM_ID_INVALID, "Invalid roomId");
     }
     if (!/^[a-zA-Z0-9_\-:.]+$/.test(roomId)) {
