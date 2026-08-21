@@ -74,6 +74,18 @@ app.get("/sdk.js", (req, res) => {
   res.sendFile(path.join(__dirname, "client-sdk", "index.js"));
 });
 
+// Serve the built Akayroom frontend from the same service.
+// This keeps the public site and signaling backend on one origin and provides
+// a SPA fallback for client-side routes.
+const frontendDist = path.join(__dirname, "../../frontend/dist");
+app.use(express.static(frontendDist));
+app.get(/^(?!\/(?:health|stats|rooms(?:\/|$)|auth(?:\/|$)|sdk\.js|ws(?:\/|$)))(?:.*)$/, (req, res, next) => {
+  if (req.method !== "GET") return next();
+  res.sendFile(path.join(frontendDist, "index.html"), (err) => {
+    if (err) next(err);
+  });
+});
+
 // Fallback 404
 app.use((req, res) => {
   res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Not found" } });
