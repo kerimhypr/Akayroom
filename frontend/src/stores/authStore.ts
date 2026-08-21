@@ -32,6 +32,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setLoading: (v) => set({ loading: v }),
   setInitialized: (v) => set({ initialized: v }),
   signOut: async () => {
+    try { localStorage.removeItem('akay_dev_token'); localStorage.removeItem('akay_dev_profile') } catch {}
     await supabase.auth.signOut()
     set({ user: null, profile: null, session: null })
   },
@@ -50,7 +51,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 // Initialize auth listener (call once from App)
 export function initAuthListener() {
-  const { setSession, setLoading, setInitialized, fetchProfile } = useAuthStore.getState()
+  const { setSession, setLoading, setInitialized, fetchProfile, setUser, setProfile } = useAuthStore.getState()
+  // dev bypass: restore dev profile if present
+  try {
+    const devToken = localStorage.getItem('akay_dev_token')
+    const devProfileRaw = localStorage.getItem('akay_dev_profile')
+    if (devToken && devProfileRaw) {
+      const devProfile = JSON.parse(devProfileRaw)
+      const devUser: any = { id: devProfile.id, email: `${devProfile.id}@dev.local` }
+      setUser(devUser)
+      setProfile(devProfile)
+      useAuthStore.setState({ session: { user: devUser } as any, loading: false, initialized: true })
+      return () => {}
+    }
+  } catch {}
   // initial session
   supabase.auth.getSession().then(async ({ data }) => {
     setSession(data.session)

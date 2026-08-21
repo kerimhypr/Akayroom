@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useNavigate, Link } from 'react-router-dom'
+import { useAuthStore } from '@/stores/authStore'
 
 export function LoginForm() {
   const [email, setEmail] = useState('')
@@ -20,11 +21,41 @@ export function LoginForm() {
     setLoading(false)
   }
 
+  const handleDevLogin = () => {
+    // Rate-limit bypass: local dev login without Supabase email (uses dev: userId for signaling)
+    // Use proper UUID so Supabase queries don't fail with "invalid input syntax for type uuid"
+    const devId = (globalThis.crypto && 'randomUUID' in globalThis.crypto) ? (globalThis.crypto as any).randomUUID() : '00000000-0000-4000-a000-' + Math.random().toString(16).slice(2, 14).padEnd(12, '0')
+    const short = devId.slice(0, 8)
+    const devUser: any = { id: devId, email: `${devId}@dev.local` }
+    const devProfile: any = {
+      id: devId,
+      username: 'dev_' + short,
+      display_name: 'Dev ' + short,
+      avatar_url: null,
+      status: 'online',
+      bio: 'Local dev (email limit bypass) — voice only, chat/servers require real login',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    // create a fake session so Supabase client thinks we're logged in (no JWT needed for dev-bypass)
+    // we store dev token in localStorage for SignalingClient fallback
+    try { localStorage.setItem('akay_dev_token', `dev:${devId}`); localStorage.setItem('akay_dev_profile', JSON.stringify(devProfile)) } catch {}
+    useAuthStore.getState().setUser(devUser)
+    useAuthStore.getState().setProfile(devProfile)
+    useAuthStore.getState().setSession({ user: devUser } as any)
+    nav('/')
+  }
+
   return (
     <form onSubmit={handle} className="space-y-4 w-full max-w-sm">
       <h1 className="text-2xl font-bold text-white">Welcome back</h1>
       <p className="text-sm text-surface-400">Sign in to continue to Akayroom</p>
       {error && <div className="bg-red-950/50 border border-red-800 text-red-300 text-sm rounded-lg p-3">{error}</div>}
+      {error && String(error).toLowerCase().includes('rate limit') && (
+        <div className="bg-amber-950/50 border border-amber-800 text-amber-300 text-sm rounded-lg p-3">
+          Email rate limit — 1 saat beklemek yerine <b>Dev Giriş</b> ile local test yapabilirsin.
+        </div>
+      )}
       <div>
         <label className="text-sm text-surface-300">Email</label>
         <Input type="email" required value={email} onChange={e=> setEmail(e.target.value)} placeholder="you@example.com" />
@@ -34,6 +65,7 @@ export function LoginForm() {
         <Input type="password" required value={password} onChange={e=> setPassword(e.target.value)} placeholder="••••••••" />
       </div>
       <Button type="submit" disabled={loading} className="w-full">{loading ? 'Signing in…' : 'Sign In'}</Button>
+      <Button type="button" variant="secondary" onClick={handleDevLogin} className="w-full">Dev Giriş (Rate Limit Bypass)</Button>
       <div className="text-sm text-surface-400 text-center">
         No account? <Link to="/register" className="text-akay-400 hover:underline">Register</Link> • <Link to="/reset" className="text-akay-400 hover:underline">Forgot password?</Link>
       </div>

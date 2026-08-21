@@ -20,5 +20,11 @@ export const supabase = createClient(url, anonKey, {
 
 export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
-  return data.session?.access_token ?? null
+  if (data.session?.access_token) return data.session.access_token
+  // dev bypass fallback (only when no Supabase session)
+  try {
+    const dev = localStorage.getItem('akay_dev_token')
+    if (dev) return dev
+  } catch {}
+  return null
 }

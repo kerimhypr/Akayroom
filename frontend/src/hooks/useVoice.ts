@@ -12,6 +12,7 @@ export function useVoice() {
   const signalingRef = useRef<SignalingClient | null>(null)
   const webrtcRef = useRef<WebRTCManager | null>(null)
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
+  const videoTrackIdRef = useRef<string | null>(null)
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map())
   const voice = useVoiceStore()
   const { profile } = useAuthStore()
@@ -261,8 +262,11 @@ export function useVoice() {
         } else {
           await webrtcRef.current?.setLocalStream(camStream)
         }
-        // publish video
-        await signalingRef.current?.publish(voice.roomId, 'video').catch(()=>{})
+        // publish video and store trackId for correct unpublish
+        try {
+          const res: any = await signalingRef.current?.publish(voice.roomId, 'video')
+          videoTrackIdRef.current = res?.data?.track?.trackId ?? res?.track?.trackId ?? null
+        } catch {}
         voice.setCamera(true)
         if (voice.localPeerId) voice.updateParticipant(voice.localPeerId, { mediaState: { camEnabled: true, videoEnabled: true } as any })
         // renegotiate
@@ -271,11 +275,15 @@ export function useVoice() {
         // stop video tracks
         const local = webrtcRef.current?.getLocalStream()
         if (local) {
-          for (const t of local.getVideoTracks()) { t.stop(); local.removeTrack(t) }
+          for (const t of local.getVideoTracks()) { t.stop(); try { local.removeTrack(t) } catch {} }
         }
-        await signalingRef.current?.unpublish(voice.roomId, 'video' as any).catch(()=>{})
-        // also try mute
-        await signalingRef.current?.mute(voice.roomId, 'video', true).catch(()=>{})
+        const tid = videoTrackIdRef.current
+        if (tid) {
+          await signalingRef.current?.unpublish(voice.roomId, tid).catch(()=>{})
+          videoTrackIdRef.current = null
+        } else {
+          await signalingRef.current?.mute(voice.roomId, 'video', true).catch(()=>{})
+        }
         voice.setCamera(false)
         if (voice.localPeerId) voice.updateParticipant(voice.localPeerId, { mediaState: { camEnabled: false, videoEnabled: false } as any })
         for (const pid of webrtcRef.current?.getPeerIds() ?? []) await webrtcRef.current?.createOffer(pid).catch(()=>{})
