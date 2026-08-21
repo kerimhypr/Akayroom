@@ -11,18 +11,12 @@ class Room {
     this.createdAt = Date.now();
     this.lastActivity = Date.now();
     this.metadata = opts.metadata || {};
-    // Voice channel style metadata (Discord-like)
-    this.channelType = opts.channelType || "voice"; // voice | video | screen
+    this.channelType = opts.channelType || "voice";
     this.maxParticipants = opts.maxParticipants || config.rooms.maxParticipantsPerRoom;
 
-    // Active participants: Map<peerId, Participant>
     this.participants = new Map();
-    // Lookup by userId -> peerId (one peer per user per room for now; can extend to multi-session)
     this.userToPeer = new Map();
-    // Stale participants pending reconnect: Map<peerId, { participant, disconnectedAt }>
     this.stale = new Map();
-
-    // SFU router attached externally (set by RoomManager)
     this.sfuRouter = null;
   }
 
@@ -56,11 +50,18 @@ class Room {
     if (this.isFull()) {
       throw new SignalingError(ErrorCodes.ROOM_FULL, `Room ${this.roomId} is full (${this.maxParticipants})`);
     }
-    // If user already in room (re-join without leave), treat as duplicate
-    if (this.userToPeer.has(userId) && this.participants.has(this.userToPeer.get(userId))) {
-      throw new SignalingError(ErrorCodes.ROOM_ALREADY_JOINED, `User ${userId} already in room ${this.roomId}`);
+
+    const existingPeerId = this.userToPeer.get(userId);
+    if (existingPeerId) {
+      const active = this.participants.get(existingPeerId);
+      if (active) {
+        if (active.sessionId === sessionId) {
+          return { participant: active, isReconnected: true, alreadyJoined: true };
+        }
+        throw new SignalingError(ErrorCodes.ROOM_ALREADY_JOINED, `User ${userId} already in room ${this.roomId}`);
+      }
     }
-    // If stale entry exists for this user (reconnect window), reclaim it
+
     const staleKey = [...this.stale.keys()].find((k) => this.stale.get(k).participant.userId === userId);
     if (staleKey) {
       const entry = this.stale.get(staleKey);
@@ -76,7 +77,7 @@ class Room {
       p.roomId = this.roomId;
       this.touch();
       logger.info("room reconnect reclaim", { roomId: this.roomId, peerId: p.peerId, userId });
-      return { participant: p, isReconnected: true };
+      return { participant: p, isReconnected: true, alreadyJoined: false };
     }
 
     const participant = new Participant({ peerId, userId, sessionId, displayName, ws });
@@ -84,35 +85,28 @@ class Room {
     this.participants.set(participant.peerId, participant);
     this.userToPeer.set(userId, participant.peerId);
     this.touch();
-    return { participant, isReconnected: false };
+    return { participant, isReconnected: false, alreadyJoined: false };
   }
 
   removeParticipant(peerId, reason = "leave") {
     const p = this.participants.get(peerId);
     if (!p) return null;
+
     this.participants.delete(peerId);
     this.userToPeer.delete(p.userId);
     p.isConnected = false;
     p.ws = null;
     this.touch();
 
-    // For disconnect (not explicit leave), keep stale for reconnect window
     if (reason === "disconnect") {
       this.stale.set(peerId, { participant: p, disconnectedAt: Date.now() });
     } else {
-      // On explicit leave, also remove SFU tracks
-      if (this.sfuRouter) {
-        this.sfuRouter.removePeer(peerId);
-      }
+      if (this.sfuRouter) this.sfuRouter.removePeer(peerId);
       try { require("../media/trackManager").trackManager.removePeer(peerId); } catch {}
     }
     return p;
   }
 
-  /**
-   * Called when a disconnected participant's WS re-attaches within window.
-   * Returns participant if found, else null.
-   */
   tryReconnect(peerId, newWs, newSessionId) {
     const entry = this.stale.get(peerId);
     if (!entry) return null;
@@ -135,12 +129,11 @@ class Room {
     return p;
   }
 
-  // Broadcast to all participants except optional excludePeerId
   broadcast(event, payload, excludePeerId = null) {
     let count = 0;
     for (const [pid, p] of this.participants.entries()) {
       if (pid === excludePeerId) continue;
-      if (!p.ws || p.ws.readyState !== 1) continue; // 1 = OPEN
+      if (!p.ws || p.ws.readyState !== 1) continue;
       try {
         p.ws.send(JSON.stringify({ event, payload }));
         count++;
@@ -151,7 +144,6 @@ class Room {
     return count;
   }
 
-  // Sweep stale entries past reconnect window
   sweepStale() {
     const now = Date.now();
     let removed = 0;
