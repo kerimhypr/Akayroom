@@ -1,5 +1,5 @@
 services:
-  - type: static
+  - type: static_site
     name: ghostgrid
     branch: main
     buildCommand: npm install && npm run build
@@ -28,7 +28,7 @@ services:
       - key: NEXT_PUBLIC_GIPHY_API_KEY
         sync: false
 
-  - type: pserv
+  - type: worker
     name: ghostgrid-twin
     runtime: node
     branch: main
