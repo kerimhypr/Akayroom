@@ -4,6 +4,12 @@
     ".write": false,
     "users": {
       "$uid": {
+        "servers": {
+          ".read": "auth != null && auth.uid === $uid",
+          "$serverId": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        },
         "public": {
           ".read": "auth != null",
           ".write": "auth != null && auth.uid === $uid",
@@ -42,8 +48,8 @@
       }
     },
     "servers": {
-      ".read": "auth != null",
       "$serverId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('servers').child($serverId).exists()",
         ".write": "auth != null && (!data.exists() || data.child('ownerId').val() === auth.uid)",
         ".validate": "newData.hasChildren(['name', 'ownerId', 'createdAt'])"
       }
@@ -212,6 +218,15 @@
         "$messageId": {
           ".write": "auth != null && !data.exists() && newData.child('authorId').val() === auth.uid",
           ".validate": "newData.hasChildren(['authorId', 'content', 'createdAt'])"
+        }
+      }
+    },
+    "dmAttachments": {
+      "$threadId": {
+        "$messageId": {
+          ".read": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()",
+          ".write": "auth != null && (!data.exists() && newData.child('authorId').val() === auth.uid || data.child('authorId').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['authorId', 'data'])"
         }
       }
     },

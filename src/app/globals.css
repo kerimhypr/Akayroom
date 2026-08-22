@@ -424,6 +424,17 @@ html { scroll-behavior: smooth; }
 }
 .modal-body input:focus, .modal-body textarea:focus, .modal-body select:focus { border-color:#fff; }
 .modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:12px 16px; border-top:1px solid var(--border); background: var(--surface-2); }
+.account-settings-modal .modal-head { height:52px; font-size:12px; }
+.account-settings-nav button { min-height:38px; transition:background .12s, color .12s, border-color .12s; }
+.account-settings-nav button:hover { background:#fff !important; color:#000 !important; border-color:#fff !important; }
+.account-settings-modal input, .account-settings-modal textarea, .account-settings-modal select { border-color:#2d2d2d; background:#080808; }
+.account-settings-modal input:focus, .account-settings-modal textarea:focus, .account-settings-modal select:focus { outline:2px solid #fff; outline-offset:1px; }
+@media (max-width:560px) {
+  .account-settings-modal { flex-direction:column; max-height:92vh !important; }
+  .account-settings-nav { width:100% !important; border-right:0 !important; border-bottom:1px solid var(--border); flex-direction:row !important; overflow-x:auto !important; }
+  .account-settings-nav > div:first-child, .account-settings-nav > div:last-child { display:none !important; }
+  .account-settings-nav button { white-space:nowrap; flex:1 0 auto; }
+}
 .btn { padding:8px 12px; border:1px solid var(--border); background: transparent; color: var(--text); font-family: var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; border-radius:0; }
 .btn:hover { border-color:#fff; }
 .btn-primary { background:#fff; color:#000; border-color:#fff; }

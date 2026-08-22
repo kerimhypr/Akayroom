@@ -190,7 +190,7 @@ export default function Home(){
   const [registerMode,setRegisterMode]=useState(false);
   const [authError,setAuthError]=useState("");
 
-  const [servers,setServers]=useState<Server[]>(fallbackServers);
+  const [servers,setServers]=useState<Server[]>([]);
   const [myServerIds,setMyServerIds]=useState<Record<string, boolean>>({});
   const [categories,setCategories]=useState<Category[]>(fallbackCats);
   const [channels,setChannels]=useState<Channel[]>(fallbackChannels);
@@ -239,7 +239,7 @@ export default function Home(){
   const [paletteQ,setPaletteQ]=useState("");
   const [showUserSettings,setShowUserSettings]=useState(false);
   const [showAccountSettings,setShowAccountSettings]=useState(false);
-  const [accountTab,setAccountTab]=useState<"hesabim"|"gorunum"|"gizlilik">("hesabim");
+  const [accountTab,setAccountTab]=useState<"hesabim"|"gorunum"|"gizlilik"|"cikis">("hesabim");
   const [cropTarget,setCropTarget]=useState<null|{type:"avatar"|"banner", file: File, url: string}>(null);
   const [cropPos,setCropPos]=useState({x:0,y:0});
   const [cropZoom,setCropZoom]=useState(1);
@@ -264,8 +264,10 @@ export default function Home(){
   const [members,setMembers]=useState<{uid:string, profile:UserProfile|null, role:string}[]>([]);
   const [dmThreads,setDmThreads]=useState<{id:string, otherUid:string, profile:UserProfile|null, lastAt:number}[]>([]);
   const [selectedDm,setSelectedDm]=useState<string|null>(null);
-  const [dmMsgs,setDmMsgs]=useState<{id:string, authorId:string, content:string, createdAt:number}[]>([]);
+  const [dmMsgs,setDmMsgs]=useState<{id:string, authorId:string, content:string, createdAt:number, attachment?: MessageAttachmentMeta|null}[]>([]);
   const [dmDraft,setDmDraft]=useState("");
+  const [dmPendingFile,setDmPendingFile]=useState<{file:File,preview?:string}|null>(null);
+  const [dmAttachmentCache,setDmAttachmentCache]=useState<Record<string,{loading?:boolean,dataUrl?:string,error?:string}>>({});
   const [friends,setFriends]=useState<{uid:string, profile:UserProfile|null}[]>([]);
   const [showMembers,setShowMembers]=useState(false);
   const [selectedProfileUid,setSelectedProfileUid]=useState<string|null>(null);
@@ -311,28 +313,28 @@ export default function Home(){
 
   useEffect(()=>{
     if(!user) return;
-    const q=query(ref(db,"servers"),orderByChild("createdAt"));
-    return onValue(q, async (snap)=>{
-      const next = snap.exists()
-        ? Object.entries(snap.val()).map(([id,v])=>({id, ...(v as Omit<Server,"id">)}))
-        : [];
-      setServers(next.length ? next : fallbackServers);
+    // Membership-driven: only load servers the user belongs to (users/{uid}/servers index)
+    return onValue(ref(db,`users/${user.uid}/servers`), async (snap)=>{
+      const ids = snap.exists() ? Object.keys(snap.val() as Record<string, boolean>) : [];
       const mine: Record<string, boolean> = {};
-      await Promise.all(next.map(async s=>{
-        try{
-          const m=await get(ref(db,`serverMembers/${s.id}/${user.uid}`));
-          if(m.exists()) mine[s.id]=true;
-        }catch{ /* not a member */ }
-      }));
+      ids.forEach(id=>{ mine[id]=true; });
       setMyServerIds(mine);
+      const loaded: Server[] = [];
+      await Promise.all(ids.map(async id=>{
+        try{
+          const s=await get(ref(db,`servers/${id}`));
+          if(s.exists()) loaded.push({id, ...(s.val() as Omit<Server,"id">)});
+        }catch{ /* not a member (or denormalized) */ }
+      }));
+      loaded.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+      setServers(loaded.length ? loaded : []);
       setSelectedServer(prev=>{
         if(prev==="demo" || !mine[prev]){
-          const first=Object.keys(mine)[0];
-          return first ?? "demo";
+          return Object.keys(mine)[0] ?? "demo";
         }
         return prev;
       });
-    }, (err)=>{ console.warn("servers load failed:", (err as any).code ?? err.message); });
+    }, (err)=>{ console.warn("my servers load failed:", (err as any).code ?? err.message); });
   },[user]);
 
   useEffect(()=>{
@@ -792,6 +794,7 @@ export default function Home(){
       const now=serverTimestamp();
       await set(sRef,{name, ownerId:user.uid, createdAt: now});
       await set(ref(db,`serverMembers/${sRef.key}/${user.uid}`),{role:"owner",joinedAt:now});
+      await set(ref(db,`users/${user.uid}/servers/${sRef.key}`), true);
       const catId=push(ref(db,`categories/${sRef.key}`)).key!;
       await set(ref(db,`categories/${sRef.key}/${catId}`),{name:"SOHBET", position:0});
       const ch1=push(ref(db,`channels/${sRef.key}`)); await set(ch1,{name:"genel", type:"text", position:0, categoryId:catId, createdAt:now});
@@ -869,7 +872,7 @@ export default function Home(){
     const url = URL.createObjectURL(file);
     setCropTarget({type:"avatar", file, url});
     setCropPos({x:0,y:0});
-    setCropZoom(1);
+    setCropZoom(0.5);
   }
   async function handleBannerFile(file: File){
     if(!user || !file) return;
@@ -877,7 +880,7 @@ export default function Home(){
     const url = URL.createObjectURL(file);
     setCropTarget({type:"banner", file, url});
     setCropPos({x:0,y:0});
-    setCropZoom(1);
+    setCropZoom(0.5);
   }
 
   async function startDM(otherUid: string){
@@ -931,6 +934,41 @@ export default function Home(){
       setSelectedDm(threadRef.key!);
     }
     (setActiveView as any)("dms" as any);
+  }
+
+  async function sendDMMessage(){
+    const content=dmDraft.trim();
+    if(!user || !selectedDm || (!content && !dmPendingFile)) return;
+    let attachment: MessageAttachmentMeta|null=null;
+    let data: string|null=null;
+    if(dmPendingFile){
+      attachment={type:attachmentKind(dmPendingFile.file), name:dmPendingFile.file.name, size:dmPendingFile.file.size};
+      data=attachment.type==="image" && dmPendingFile.preview ? dmPendingFile.preview : await fileToDataUrl(dmPendingFile.file);
+      if(data.length>9.5*1024*1024){ setToast("DM dosyası çok büyük"); return; }
+    }
+    const r=push(ref(db,`dmMessages/${selectedDm}`));
+    await set(r,{authorId:user.uid, content:content || `📎 ${attachment!.name}`, createdAt:Date.now(), attachment});
+    if(attachment && data && r.key) await set(ref(db,`dmAttachments/${selectedDm}/${r.key}`),{authorId:user.uid,type:attachment.type,name:attachment.name,size:attachment.size,mime:dmPendingFile!.file.type,data});
+    await update(ref(db,`dmThreads/${selectedDm}`),{lastMessageAt:Date.now()});
+    setDmDraft(""); setDmPendingFile(null);
+  }
+
+  function handleDmFile(file: File){
+    const kind=attachmentKind(file);
+    const cap=kind==="video"||kind==="audio" ? 5*1024*1024 : kind==="image" ? 15*1024*1024 : 2*1024*1024;
+    if(file.size>cap){setToast(`DM dosyası çok büyük — sınır ${fmtSize(cap)}`); return;}
+    if(kind==="image") compressImage(file).then(preview=>setDmPendingFile({file,preview}));
+    else setDmPendingFile({file});
+  }
+
+  async function loadDmAttachment(m: {id:string, attachment?:MessageAttachmentMeta|null}){
+    if(!m.attachment || !selectedDm) return;
+    setDmAttachmentCache(p=>({...p,[m.id]:{loading:true}}));
+    try{
+      const s=await get(ref(db,`dmAttachments/${selectedDm}/${m.id}`));
+      if(s.exists()) setDmAttachmentCache(p=>({...p,[m.id]:{dataUrl:(s.val() as any).data}}));
+      else setDmAttachmentCache(p=>({...p,[m.id]:{error:"ek bulunamadı"}}));
+    }catch{setDmAttachmentCache(p=>({...p,[m.id]:{error:"ek açılamadı"}}));}
   }
 
   async function createInvite(){
@@ -1167,8 +1205,7 @@ export default function Home(){
                     <small>@{profile?.username ?? username}</small>
                   </div>
                   <div className="cu-actions">
-                    <button onClick={()=>setShowAccountSettings(true)} title="Hesap Ayarları"><span className="icon"><Icon name="settings"/></span></button>
-                    <button onClick={()=>signOut(auth)} title="Çıkış">⎋</button>
+                    <button onClick={()=>setShowAccountSettings(true)} title="Kullanıcı Ayarları"><span className="icon"><Icon name="settings"/></span></button>
                   </div>
                 </div>
               </>
@@ -1215,7 +1252,7 @@ export default function Home(){
             <div className="current-user">
               <div className="cu-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
               <div className="cu-meta"><strong>{profile?.displayName ?? username}</strong><small>@{profile?.username ?? username}</small></div>
-              <div className="cu-actions"><button onClick={()=>signOut(auth)} title="Çıkış">⎋</button></div>
+              <div className="cu-actions"><button onClick={()=>setShowAccountSettings(true)} title="Kullanıcı Ayarları"><span className="icon"><Icon name="settings"/></span></button></div>
             </div>
           </>
         ) : activeView==="friends" ? (
@@ -1363,7 +1400,6 @@ export default function Home(){
                             )}
                           </div>
                         ); })()}
-                        <span style={{fontFamily:"var(--font-mono)", fontSize:10, border:"1px solid var(--border)", padding:"4px 6px", color:"var(--muted)"}}>YAKINDA</span>
                       </div>
                     </div>
                   </div>
@@ -1391,18 +1427,20 @@ export default function Home(){
                   <div className="empty-state"><div className="empty-orb"><span className="icon"><Icon name="dm"/></span></div><h2>DM seç</h2><p>soldan bir kişi seç veya arkadaş ekle.</p></div>
                 ) : dmMsgs.length===0 ? (
                   <div className="empty-state"><div className="empty-orb">#</div><h2>henüz mesaj yok</h2><p>ilk mesajı gönder.</p></div>
-                ) : dmMsgs.filter(m=> !search || m.content.toLowerCase().includes(search.toLowerCase())).map(m=>(
+                ) : dmMsgs.filter(m=> !search || m.content.toLowerCase().includes(search.toLowerCase()) || m.attachment?.name.toLowerCase().includes(search.toLowerCase())).map(m=>(
                   <div key={m.id} className={`message-row ${m.authorId===user.uid ? "" : ""}`} style={{maxWidth:760, margin:"0 auto", width:"100%"}}>
                     <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorId===user.uid ? (profile?.displayName||username) : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"??"))}</button>
-                    <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)}</span></div><div className="msg-content">{m.content}</div></div>
+                    <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)}</span></div><div className="msg-content">{m.content}</div>{m.attachment && (()=>{const c=dmAttachmentCache[m.id]; return c?.dataUrl ? (m.attachment.type==="image" ? <img src={c.dataUrl} alt={m.attachment.name} style={{marginTop:6,maxWidth:"100%",maxHeight:340,objectFit:"contain",display:"block"}}/> : m.attachment.type==="video" ? <video src={c.dataUrl} controls style={{marginTop:6,maxWidth:"100%",maxHeight:360,display:"block"}}/> : m.attachment.type==="audio" ? <audio src={c.dataUrl} controls style={{marginTop:6,width:"100%"}}/> : <a href={c.dataUrl} download={m.attachment.name} className="btn" style={{display:"inline-block",marginTop:6}}>⎘ {m.attachment.name}</a>) : <button className="btn" style={{marginTop:6}} onClick={()=>loadDmAttachment(m)} disabled={c?.loading}>{c?.loading?"yükleniyor…":`📎 ${m.attachment.name} (${fmtSize(m.attachment.size)}) — aç`}</button>;})()}</div>
                   </div>
                 ))}
               </div>
               {selectedDm && (
                 <div className="composer-wrap">
-                  <form className="composer" onSubmit={e=>{e.preventDefault(); const c=dmDraft.trim(); if(!c||!selectedDm||!user) return; const r=push(ref(db,`dmMessages/${selectedDm}`)); set(r,{authorId:user.uid, content:c, createdAt: Date.now()}); update(ref(db,`dmThreads/${selectedDm}`),{lastMessageAt: Date.now()}); setDmDraft("");}} style={{alignItems:"center"}}>
-                    <textarea value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault(); const c=dmDraft.trim(); if(!c||!selectedDm||!user) return; const r=push(ref(db,`dmMessages/${selectedDm}`)); set(r,{authorId:user.uid, content:c, createdAt: Date.now()}); update(ref(db,`dmThreads/${selectedDm}`),{lastMessageAt: Date.now()}); setDmDraft("");}}} placeholder="mesaj yaz — Enter gönder" rows={1} className="composer-input" style={{minHeight:24, maxHeight:80}}/>
-                    <button type="submit" className="send-button" disabled={!dmDraft.trim()}><span className="icon"><Icon name="send"/></span></button>
+                  {dmPendingFile && <div style={{border:"1px solid var(--border)",background:"var(--surface-2)",padding:"6px 8px",marginBottom:6,display:"flex",alignItems:"center",gap:8}}><span style={{flex:1,fontFamily:"var(--font-mono)",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📎 {dmPendingFile.file.name} ({fmtSize(dmPendingFile.file.size)})</span><button onClick={()=>setDmPendingFile(null)} style={{border:"1px solid var(--border)",background:"transparent"}}>✕</button></div>}
+                  <form className="composer" onSubmit={e=>{e.preventDefault(); void sendDMMessage();}} style={{alignItems:"center"}}>
+                    <label className="composer-plus" title="DM dosyası ekle" style={{cursor:"pointer",display:"grid",placeItems:"center"}}>＋<input type="file" hidden accept="image/*,video/*,audio/*,.pdf,.zip,.txt,.doc,.docx" onChange={e=>{const f=e.target.files?.[0];if(f)handleDmFile(f);e.currentTarget.value="";}}/></label>
+                    <textarea value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendDMMessage();}}} placeholder="mesaj yaz — dosya veya fotoğraf ekle" rows={1} className="composer-input" style={{minHeight:24, maxHeight:80}}/>
+                    <button type="submit" className="send-button" disabled={!dmDraft.trim()&&!dmPendingFile}><span className="icon"><Icon name="send"/></span></button>
                   </form>
                 </div>
               )}
@@ -1678,7 +1716,6 @@ export default function Home(){
                   </div>
                   <div className="composer-actions">
                     <button type="button" onClick={()=>setShowGif(v=>!v)} title="GIF">GIF</button>
-                    <button type="button" onClick={()=>setShowEmoji(v=>!v)} title="Emoji & Sticker">☺</button>
                     <button type="button" onClick={()=>setShowEmoji(v=>!v)} title="Emoji">☺</button>
                     <button type="submit" className="send-button" disabled={!draft.trim()} title="Gönder"><span className="icon"><Icon name="send" size={18}/></span></button>
                   </div>
@@ -2001,13 +2038,14 @@ export default function Home(){
 
       {showAccountSettings && (
         <div className="modal-backdrop" onClick={()=>setShowAccountSettings(false)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{width:"min(680px, 96vw)", maxHeight:"86vh", display:"flex", overflow:"hidden", padding:0}}>
-            <div style={{width:180, borderRight:"1px solid var(--border)", background:"var(--surface-2)", padding:12, display:"flex", flexDirection:"column", gap:4, overflow:"auto"}}>
+          <div className="modal account-settings-modal" onClick={e=>e.stopPropagation()} style={{width:"min(760px, 96vw)", maxHeight:"88vh", display:"flex", overflow:"hidden", padding:0}}>
+            <div className="account-settings-nav" style={{width:200, borderRight:"1px solid var(--border)", background:"var(--surface-2)", padding:14, display:"flex", flexDirection:"column", gap:5, overflow:"auto"}}>
               <div style={{fontFamily:"var(--font-mono)", fontSize:10, letterSpacing:".08em", color:"var(--muted)", padding:"8px 8px 4px"}}>KULLANICI AYARLARI</div>
               {[
                 {id:"hesabim", label:"Hesabım", icon:"user"},
                 {id:"gorunum", label:"Görünüm", icon:"grid"},
                 {id:"gizlilik", label:"Gizlilik", icon:"inbox"},
+                {id:"cikis", label:"Çıkış", icon:"logout"},
               ].map(tab=>(
                 <button key={tab.id} onClick={()=>setAccountTab(tab.id as any)} style={{textAlign:"left", padding:"8px 10px", border:"1px solid var(--border)", background: accountTab===tab.id ? "#fff" : "transparent", color: accountTab===tab.id ? "#000" : "var(--muted)", fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:8}}>
                   <span className="icon"><Icon name={tab.icon}/></span>{tab.label}
@@ -2020,7 +2058,7 @@ export default function Home(){
               </div>
             </div>
             <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0, background:"var(--surface)"}}>
-              <div className="modal-head"><span>{accountTab==="hesabim" ? "HESABIM" : accountTab==="gorunum" ? "GÖRÜNÜM" : "GİZLİLİK"}</span><button onClick={()=>setShowAccountSettings(false)}>✕</button></div>
+              <div className="modal-head"><span>{accountTab==="hesabim" ? "HESABIM" : accountTab==="gorunum" ? "GÖRÜNÜM" : accountTab==="gizlilik" ? "GİZLİLİK" : "ÇIKIŞ"}</span><button onClick={()=>setShowAccountSettings(false)}>✕</button></div>
               <div style={{flex:1, overflow:"auto", padding:16}}>
                 {accountTab==="hesabim" && (
                   <div style={{display:"flex", flexDirection:"column", gap:14}}>
@@ -2095,6 +2133,16 @@ export default function Home(){
                       <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>GÜVENLİ MESAJLAŞMA</div>
                       <div style={{fontSize:11, color:"var(--muted)", marginTop:4}}>Uçtan uca şifreleme stub — ileride Signal benzeri.</div>
                     </div>
+                  </div>
+                )}
+                {accountTab==="cikis" && (
+                  <div style={{display:"flex", flexDirection:"column", gap:12, maxWidth:440}}>
+                    <div style={{border:"1px solid #ff5c70", background:"#190006", padding:16}}>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:12, fontWeight:700, color:"#ff9baf"}}>OTURUMU KAPAT</div>
+                      <div style={{fontSize:12, color:"#ffb7c3", marginTop:8}}>Bu cihazdaki GhostGrid oturumun kapatılır. Hesabın ve sunucuların silinmez.</div>
+                      <button className="btn btn-danger" onClick={()=>signOut(auth)} style={{marginTop:14, borderColor:"#ff9baf", color:"#ff9baf"}}>ÇIKIŞ YAP</button>
+                    </div>
+                    <div style={{border:"1px dashed var(--border)", padding:12, fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>Hesabı kalıcı silmek için Hesabım sekmesindeki Hesabı Sil alanını kullan.</div>
                   </div>
                 )}
               </div>
@@ -2314,11 +2362,11 @@ export default function Home(){
               </div>
               <div style={{display:"flex", alignItems:"center", gap:8, border:"1px solid var(--border)", background:"var(--surface-2)", padding:"8px 10px"}}>
                 <span style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>ZOOM</span>
-                <button onClick={()=>setCropZoom(z=>Math.max(1, z-0.1))} style={{width:24, height:24, border:"1px solid var(--border)", background:"#000", color:"#fff"}}>−</button>
-                <input type="range" min={1} max={2.2} step={0.05} value={cropZoom} onChange={e=>setCropZoom(parseFloat(e.target.value))} style={{flex:1, accentColor:"#fff"}} />
+                 <button onClick={()=>setCropZoom(z=>Math.max(0.5, z-0.1))} style={{width:24, height:24, border:"1px solid var(--border)", background:"#000", color:"#fff"}}>−</button>
+                 <input type="range" min={0.5} max={2.2} step={0.05} value={cropZoom} onChange={e=>setCropZoom(parseFloat(e.target.value))} style={{flex:1, accentColor:"#fff"}} />
                 <button onClick={()=>setCropZoom(z=>Math.min(2.2, z+0.1))} style={{width:24, height:24, border:"1px solid var(--border)", background:"#000", color:"#fff"}}>+</button>
                 <span style={{fontFamily:"var(--font-mono)", fontSize:10, border:"1px solid var(--border)", padding:"3px 6px", minWidth:42, textAlign:"center"}}>{Math.round(cropZoom*100)}%</span>
-                <button className="btn" onClick={()=>{setCropPos({x:0,y:0}); setCropZoom(1);}} style={{fontSize:10, padding:"4px 8px"}}>RESET</button>
+                 <button className="btn" onClick={()=>{setCropPos({x:0,y:0}); setCropZoom(0.5);}} style={{fontSize:10, padding:"4px 8px"}}>RESET</button>
               </div>
               <div style={{display:"flex", gap:6, justifyContent:"flex-end"}}>
                 <button className="btn" onClick={()=>{ URL.revokeObjectURL(cropTarget.url); setCropTarget(null);}}>İPTAL</button>
