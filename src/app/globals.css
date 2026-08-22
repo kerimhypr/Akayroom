@@ -526,6 +526,34 @@ html { scroll-behavior: smooth; }
 .voice-controls button.active { background:#fff; color:#000; }
 .voice-controls button:hover { border-color:#fff; }
 
+/* Call overlay */
+.call-overlay { position:fixed; inset:0; background: rgba(0,0,0,.78); backdrop-filter: blur(2px); z-index:90; display:flex; align-items:center; justify-content:center; padding:16px; }
+.call-window { background: var(--surface); border:1px solid #fff; max-width:420px; width:100%; padding:14px; box-shadow: 6px 6px 0 #000; animation: slideDown .18s ease-out both; }
+.call-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.call-title { font-family: var(--font-mono); font-size:13px; font-weight:700; letter-spacing:.04em; }
+.call-min { border:1px solid var(--border); background:transparent; color:var(--muted); width:28px; height:28px; display:grid; place-items:center; cursor:pointer; flex:none; }
+.call-min:hover { background:#fff; color:#000; }
+.call-grid { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+.call-card { border:1px solid var(--border); background: var(--surface-2); padding:10px; width:calc(50% - 4px); display:flex; flex-direction:column; align-items:center; gap:6px; min-width:120px; }
+.call-card.muted { opacity:.55; }
+.call-avatar { width:52px; height:52px; border-radius:50%; background:#111; color:#fff; display:grid; place-items:center; font-size:16px; font-weight:700; overflow:hidden; }
+.call-avatar img { width:100%; height:100%; object-fit:cover; }
+.call-name { font-family: var(--font-mono); font-size:11px; font-weight:700; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.call-status { font-family: var(--font-mono); font-size:9px; color: var(--muted); display:flex; align-items:center; gap:4px; }
+.call-empty { font-family: var(--font-mono); font-size:10px; color: var(--muted); width:100%; border:1px dashed var(--border); padding:8px; text-align:center; }
+.call-controls { display:flex; gap:6px; align-items:center; justify-content:center; }
+.call-controls button { border:1px solid var(--border); background:#000; color: var(--text); width:44px; height:44px; border-radius:50%; display:grid; place-items:center; cursor:pointer; font-family: var(--font-mono); font-size:10px; font-weight:700; }
+.call-controls button.active { background:#fff; color:#000; }
+.call-controls button:hover { border-color:#fff; }
+.call-controls button.danger { background:#ff4444; color:#fff; width:auto; padding:0 14px; gap:6px; border-radius:22px; }
+.call-audios { display:none; }
+
+/* Call picture-in-picture (draggable) */
+.call-pip { position:fixed; z-index:110; width:44px; height:44px; border-radius:50%; background:#fff; color:#000; display:grid; place-items:center; cursor:grab; border:1px solid #fff; box-shadow: 4px 4px 0 #000; touch-action:none; user-select:none; }
+.call-pip:active { cursor:grabbing; }
+.call-pip .pip-muted { position:absolute; bottom:-3px; right:-3px; width:18px; height:18px; border-radius:50%; background:#ff4444; color:#fff; display:grid; place-items:center; border:1px solid #fff; }
+.call-pip .icon svg { stroke:#000; }
+
 .invite-box { display:flex; gap:6px; margin-top:8px; }
 .invite-box input { flex:1; background:#000; border:1px solid var(--border); color:#fff; padding:7px; font-family: var(--font-mono); font-size:11px; }
 .invite-box button { background:#fff; color:#000; border:1px solid #fff; padding:0 10px; font-family: var(--font-mono); font-size:11px; font-weight:700; }

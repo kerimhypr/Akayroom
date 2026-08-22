@@ -73,6 +73,10 @@ function Icon({name, size=14}: {name: string, size?: number}){
     grid: <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>,
     send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
     mic: <><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="19" x2="12" y2="22"/></>,
+    micOff: <><line x1="1" x2="23" y1="1" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="22"/></>,
+    phone: <><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.64.29 1.27.5 1.87a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.6.21 1.23.38 1.87.5A2 2 0 0 1 22 16.92z"/></>,
+    phoneOff: <><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" x2="2" y1="2" y2="22"/></>,
+    minimize: <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>,
     user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
   };
   return <svg {...common}>{paths[name] ?? paths.hash}</svg>;
@@ -253,6 +257,11 @@ export default function Home(){
   const [joinedVoice,setJoinedVoice]=useState<string|null>(null);
   const [micMuted,setMicMuted]=useState(false);
   const [deafen,setDeafen]=useState(false);
+  const [callPip,setCallPip]=useState(false);
+  const [callPipPos,setCallPipPos]=useState(()=>{
+    if(typeof window!=="undefined"){ try{ const p=JSON.parse(localStorage.getItem("akayroom_callPipPos")||"null"); if(p&&typeof p.x==="number"&&typeof p.y==="number") return p; }catch{} }
+    return {x:12,y:12};
+  });
   const [voiceParticipants,setVoiceParticipants]=useState<Record<string, {profile: UserProfile|null, joinedAt:number}>>({});
   const [remoteStreams,setRemoteStreams]=useState<Record<string, MediaStream>>({});
   const localStreamRef = useRef<MediaStream|null>(null);
@@ -287,6 +296,14 @@ export default function Home(){
 
   const selectedServerData = useMemo(()=> servers.find(s=>s.id===selectedServer) ?? servers[0],[servers,selectedServer]);
   const selectedChannelData = useMemo(()=> channels.find(c=>c.id===selectedChannel) ?? channels[0],[channels,selectedChannel]);
+
+  const callTitle = useMemo(()=>{
+    if(!joinedVoice) return "";
+    if(activeView==="dms"){
+      return dmThreads.find(d=>d.id===joinedVoice)?.profile?.displayName || dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName || "DM araması";
+    }
+    return channels.find(c=>c.id===joinedVoice)?.name || "Sesli oda";
+  },[joinedVoice, activeView, dmThreads, channels, selectedDm]);
 
   const filteredChannels = useMemo(()=>{
     if(!search.trim()) return channels;
@@ -596,6 +613,11 @@ export default function Home(){
     document.querySelectorAll<HTMLAudioElement>("audio[data-voice]").forEach(a=>{ a.volume = deafen ? 0 : 1; });
   },[deafen, remoteStreams]);
 
+  // persist pip position
+  useEffect(()=>{
+    if(typeof window!=="undefined"){ try{ localStorage.setItem("akayroom_callPipPos", JSON.stringify(callPipPos)); }catch{} }
+  },[callPipPos]);
+
   // poll votes: live sync per unique poll id (fixes "poll created but cannot vote")
   const pollIdsKey = useMemo(()=> messages.filter(m=>m.poll).map(m=>m.poll!.id).filter((v,i,a)=>a.indexOf(v)===i).join(","), [messages]);
   useEffect(()=>{
@@ -843,6 +865,7 @@ export default function Home(){
     if(!selectedChannelData) return;
     // For voice channel, just join; for text, also join as call
     setJoinedVoice(selectedChannel);
+    setCallPip(false);
     setToast(`arama başlatıldı — #${selectedChannelData.name}`);
   }
 
@@ -1142,35 +1165,6 @@ export default function Home(){
                   <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="kanal ara" />
                 </div>
                 <div className="channel-scroll">
-                  {joinedVoice && (
-                    <div className="voice-panel animate-fade">
-                      <div className="vp-head"><span>● {channels.find(c=>c.id===joinedVoice)?.name} — {Object.keys(voiceParticipants).length + 1} kişi</span><button onClick={()=>setJoinedVoice(null)} style={{border:"1px solid var(--border)", background:"transparent", color:"var(--muted)"}}>✕</button></div>
-                      <div style={{fontFamily:"var(--font-mono)", fontSize:10, color: deafen ? "#f23f42" : "var(--muted)", marginBottom:6}}>{deafen ? "sağır — ses kapalı" : micMuted ? "mikrofon kapalı" : "● canlı — konuş"}</div>
-                      <div className="voice-controls">
-                        <button className={micMuted?"active":""} onClick={()=>setMicMuted(v=>!v)}>{micMuted?"🔇 MİK KAPALI":"🎙️ MİK AÇIK"}</button>
-                        <button className={deafen?"active":""} onClick={()=>setDeafen(v=>!v)}>{deafen?"🔊 SAĞIR KAPALI":"🔇 SAĞIR"}</button>
-                        <button onClick={()=>setJoinedVoice(null)}>AYRIL</button>
-                      </div>
-                      <div style={{marginTop:8, display:"flex", flexDirection:"column", gap:4, maxHeight:140, overflow:"auto"}}>
-                        <div style={{display:"flex", alignItems:"center", gap:6, padding:"4px 6px", border:"1px solid var(--border)", background: micMuted ? "var(--surface)" : "#fff", color: micMuted ? "var(--muted)" : "#000"}}>
-                          <div style={{width:22, height:22, borderRadius:"50%", background:"#000", color:"#fff", display:"grid", placeItems:"center", fontSize:9, fontWeight:700}}>{initials(profile?.displayName ?? username)}</div>
-                          <span style={{flex:1, fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>Sen {micMuted ? "(sessiz)" : ""}</span>
-                          <span style={{fontSize:10}}>{micMuted ? "🔇" : "●"}</span>
-                        </div>
-                        {Object.entries(voiceParticipants).map(([uid, info])=>(
-                          <div key={uid} style={{display:"flex", alignItems:"center", gap:6, padding:"4px 6px", border:"1px solid var(--border)", background:"var(--surface-2)"}}>
-                            <div style={{width:22, height:22, borderRadius:"50%", background:"#111", color:"#fff", display:"grid", placeItems:"center", fontSize:9, fontWeight:700, overflow:"hidden"}}>
-                              {info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(info.profile?.displayName || info.profile?.username || "??")}
-                            </div>
-                            <span style={{flex:1, fontFamily:"var(--font-mono)", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{info.profile?.displayName || info.profile?.username || uid.slice(0,6)}</span>
-                            <span style={{fontSize:10}}>{remoteStreams[uid] ? "●" : "○"}</span>
-                            <audio autoPlay playsInline data-voice ref={el=>{ if(el && remoteStreams[uid]){ el.srcObject = remoteStreams[uid]; el.volume = deafen ? 0 : 1; try{ el.play().catch(()=>{});}catch{} } }} />
-                          </div>
-                        ))}
-                        {Object.keys(voiceParticipants).length===0 && <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:"6px", border:"1px dashed var(--border)", textAlign:"center"}}>başka kimse yok — davet et</div>}
-                      </div>
-                    </div>
-                  )}
                   {(categories.length?categories:[{id:"_none",name:"SOHBET",position:0}] as Category[]).map(cat=>{
                     const chans = filteredChannels.filter(c=> (c.categoryId||"_none")===cat.id || (cat.id==="_none" && !c.categoryId));
                     if(chans.length===0) return null;
@@ -1205,7 +1199,7 @@ export default function Home(){
                   <div className="context-menu" style={{left:channelMenu.x, top:channelMenu.y}} onClick={e=>e.stopPropagation()}>
                     <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:"4px 8px", borderBottom:"1px solid var(--border)"}}>#{channelMenu.channel.name}</div>
                     <div className="context-item" onClick={()=>{ setSelectedChannel(channelMenu.channel.id); if(channelMenu.channel.type==="voice") setJoinedVoice(channelMenu.channel.id); setChannelMenu(null); }}><span className="icon"><Icon name="hash" size={12}/></span> Kanala Git</div>
-                    <div className="context-item" onClick={()=>{ startCall(); setChannelMenu(null); }}><span className="icon"><Icon name="mic" size={12}/></span> Arama Başlat</div>
+                    <div className="context-item" onClick={()=>{ startCall(); setChannelMenu(null); }}><span className="icon"><Icon name="phone" size={12}/></span> Sesli arama</div>
                     <div className="context-item" onClick={()=>{ setEditingChannel(channelMenu.channel); setEditChannelName(channelMenu.channel.name); setEditChannelTopic(channelMenu.channel.topic||""); setChannelMenu(null); }}><span className="icon"><Icon name="settings" size={12}/></span> Düzenle</div>
                     <div className="context-item" onClick={()=>{ navigator.clipboard.writeText(`#${channelMenu.channel.name}`); setToast("kopyalandı"); setChannelMenu(null); }}>⎘ Kopyala</div>
                     <div className="context-item danger" onClick={()=> deleteChannel(channelMenu.channel.id)}><span className="icon"><Icon name="plus" size={12}/></span> Sil</div>
@@ -1431,9 +1425,8 @@ export default function Home(){
             <>
               <header className="chat-header">
                 <div className="channel-heading"><span className="hash"><span className="icon"><Icon name="dm"/></span></span><strong>{dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName || "MESAJLAR"}</strong><span className="topic">uçtan uca • RTDB</span></div>
-                <div className="header-actions"><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{if(!selectedDm)return;setJoinedVoice(joinedVoice===selectedDm?null:selectedDm);setToast(joinedVoice===selectedDm?"DM araması kapandı":"DM araması başlatıldı — karşı taraf da mikrofona bassın")}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid #fff":"1px solid var(--border)",background:joinedVoice===selectedDm?"#fff":"transparent",color:joinedVoice===selectedDm?"#000":"var(--muted)"}}><span className="icon"><Icon name="mic"/></span></button></div>
+                <div className="header-actions"><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{if(!selectedDm)return;setJoinedVoice(joinedVoice===selectedDm?null:selectedDm);setCallPip(false);setToast(joinedVoice===selectedDm?"DM araması kapandı":"DM araması başlatıldı")}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid #fff":"1px solid var(--border)",background:joinedVoice===selectedDm?"#fff":"transparent",color:joinedVoice===selectedDm?"#000":"var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button></div>
               </header>
-              {joinedVoice===selectedDm && <div style={{padding:"6px 16px",borderBottom:"1px solid var(--border)",background:"var(--surface-2)",fontFamily:"var(--font-mono)",fontSize:10,display:"flex",alignItems:"center",gap:8}}><span>● DM ARAMASI AKTİF</span>{Object.entries(remoteStreams).map(([uid,stream])=><audio key={uid} autoPlay playsInline data-voice ref={el=>{if(el){el.srcObject=stream;el.volume=deafen?0:1;void el.play().catch(()=>{});}}}/>)}<button className="btn" onClick={()=>setJoinedVoice(null)} style={{marginLeft:"auto",padding:"4px 8px"}}>KAPAT</button></div>}
               <div className="message-area" style={{padding:16}}>
                 {!selectedDm ? (
                   <div className="empty-state"><div className="empty-orb"><span className="icon"><Icon name="dm"/></span></div><h2>DM seç</h2><p>soldan bir kişi seç veya arkadaş ekle.</p></div>
@@ -1515,7 +1508,7 @@ export default function Home(){
               </div>
               <div className="header-actions">
                 <div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ara" /></div>
-                <button onClick={startCall} title="Arama Başlat — sesli arama" style={{border: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "1px solid #fff" : "1px solid var(--border)", background: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#fff" : "transparent", color: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#000" : "var(--muted)"}}><span className="icon"><Icon name="mic"/></span></button>
+                <button onClick={startCall} title="Sesli arama başlat" style={{border: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "1px solid #fff" : "1px solid var(--border)", background: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#fff" : "transparent", color: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#000" : "var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button>
                 <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo"){ setEditingChannel(selectedChannelData); setEditChannelName(selectedChannelData.name); setEditChannelTopic(selectedChannelData.topic||""); } }} title="Kanalı Düzenle"><span className="icon"><Icon name="settings"/></span></button>
                 <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"#ff4444", borderColor:"var(--border)"}}>🗑</button>
                 <button onClick={()=>setShowPalette(true)}>⌘K</button>
@@ -2457,6 +2450,55 @@ export default function Home(){
         </div>
       )}
       {toast && <div className="toast">{toast}</div>}
+      {joinedVoice && (
+        callPip ? (
+          <div className="call-pip"
+            style={{left:callPipPos.x, top:callPipPos.y}}
+            onPointerDown={(e)=>{ e.currentTarget.setPointerCapture(e.pointerId); (e.currentTarget as any)._startX=e.clientX; (e.currentTarget as any)._startY=e.clientY; (e.currentTarget as any)._pipStart=callPipPos; (e.currentTarget as any)._moved=false; }}
+            onPointerMove={(e)=>{ const el=e.currentTarget as any; if(el._pipStart==null) return; const dx=e.clientX-el._startX; const dy=e.clientY-el._startY; if(Math.abs(dx)>4||Math.abs(dy)>4) el._moved=true; setCallPipPos({x:Math.max(4, Math.min(window.innerWidth-44, el._pipStart.x+dx)), y:Math.max(4, Math.min(window.innerHeight-44, el._pipStart.y+dy))}); }}
+            onPointerUp={(e)=>{ const el=e.currentTarget as any; if(el._moved){ /* just drag */ } else { setCallPip(false); } el._pipStart=null; }}
+            title="Aramayı genişlet"
+          >
+            <span className="icon"><Icon name={micMuted?"phoneOff":"phone"} size={20}/></span>
+            {micMuted && <span className="pip-muted"><Icon name="micOff" size={10}/></span>}
+          </div>
+        ) : (
+          <div className="call-overlay">
+            <div className="call-window">
+              <div className="call-head">
+                <div>
+                  <div className="call-title">● {callTitle}</div>
+                  <div style={{fontFamily:"var(--font-mono)", fontSize:10, color: deafen ? "#f23f42" : "var(--muted)", marginTop:2}}>{deafen ? "sağır — ses kapalı" : micMuted ? "mikrofon kapalı" : "canlı — konuş"}</div>
+                </div>
+                <button className="call-min" onClick={()=>setCallPip(true)} title="Küçült"><span className="icon"><Icon name="minimize" size={14}/></span></button>
+              </div>
+              <div className="call-grid">
+                <div className={`call-card ${micMuted?"muted":""}`}>
+                  <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>
+                  <div className="call-name">Sen</div>
+                  <div className="call-status"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={11}/></span> {micMuted ? "sessiz" : "konuşuyor"}</div>
+                </div>
+                {Object.entries(voiceParticipants).map(([uid, info])=>(
+                  <div key={uid} className="call-card">
+                    <div className="call-avatar">{info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
+                    <div className="call-name">{info.profile?.displayName || info.profile?.username || uid.slice(0,6)}</div>
+                    <div className="call-status"><span className="icon"><Icon name="mic" size={11}/></span> {remoteStreams[uid] ? "bağlı" : "bağlanıyor…"}</div>
+                  </div>
+                ))}
+                {Object.keys(voiceParticipants).length===0 && <div className="call-empty">başka kimse yok — davet et</div>}
+              </div>
+              <div className="call-controls">
+                <button className={micMuted?"active":""} onClick={()=>setMicMuted(v=>!v)} title="Mikrofonu aç/kapat"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={16}/></span></button>
+                <button className={deafen?"active":""} onClick={()=>setDeafen(v=>!v)} title="Sağır modu (karşı tarafın sesini kapat)"><span className="icon"><Icon name="phoneOff" size={16}/></span></button>
+                <button className="danger" onClick={()=>setJoinedVoice(null)} title="Aramayı bitir"><span className="icon"><Icon name="phoneOff" size={16}/></span> AYRIL</button>
+              </div>
+              <div className="call-audios">
+                {Object.entries(remoteStreams).map(([uid,stream])=>(<audio key={uid} autoPlay playsInline data-voice ref={el=>{if(el){el.srcObject=stream;el.volume=deafen?0:1;void el.play().catch(()=>{});}}}/>))}
+              </div>
+            </div>
+          </div>
+        )
+      )}
     </main>
   );
 }
