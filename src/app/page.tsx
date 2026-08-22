@@ -1869,7 +1869,9 @@ export default function Home(){
                       <div key={f.uid} className="friend-row">
                         <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
                         <div style={{flex:1}}><div style={{fontWeight:600}}>{f.profile?.displayName||f.profile?.username}</div><div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>@{f.profile?.username}</div></div>
-                        <button className="btn" onClick={()=>startDM(f.uid)}>MESAJ</button>
+                         <button className="btn" onClick={()=>startDM(f.uid)}>MESAJ</button>
+                         <button className="btn" onClick={()=>void inviteFriendToServer(f.uid)} title="Seçili sunucuya davet et">DAVET</button>
+                         <button className="btn" style={{color:"#ff4444"}} onClick={()=>void removeFriend(f.uid)} title="Arkadaşlıktan çıkar">ÇIKAR</button>
                       </div>
                     ))}
                   </div>
