@@ -11,6 +11,7 @@ import {
 import {
   get,
   limitToLast,
+  onChildAdded,
   onDisconnect,
   onValue,
   orderByChild,
@@ -200,8 +201,8 @@ export default function Home(){
   const [channels,setChannels]=useState<Channel[]>(fallbackChannels);
   const [selectedServer,setSelectedServer]=useState("demo");
   const [selectedChannel,setSelectedChannel]=useState("general");
-  const [activeView,setActiveView]=useState<"server"|"friends"|"dms"|"inbox"|"profile">("server");
-  const [friendsTab,setFriendsTab]=useState<"all"|"add">("all");
+  const [activeView,setActiveView]=useState<"server"|"servers"|"friends"|"dms"|"inbox"|"profile">("server");
+  const [friendsTab,setFriendsTab]=useState<"friends"|"inbox"|"dms">("friends");
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [draft,setDraft]=useState("");
   const [drafts,setDrafts]=useState<Record<string,string>>({});
@@ -227,7 +228,9 @@ export default function Home(){
   const [showCreateServer,setShowCreateServer]=useState(false);
   const [newServerName,setNewServerName]=useState("");
   const [creatingServer,setCreatingServer]=useState(false);
+  const [newServerIcon,setNewServerIcon]=useState("");
   const [joiningInvite,setJoiningInvite]=useState(false);
+  const [showJoinInvite,setShowJoinInvite]=useState(false);
   const [showCreateChannel,setShowCreateChannel]=useState(false);
   const [newChannelName,setNewChannelName]=useState("");
   const [newChannelType,setNewChannelType]=useState<Channel["type"]>("text");
@@ -290,6 +293,9 @@ export default function Home(){
   const [sendingAttachment,setSendingAttachment]=useState(false);
   const [attCache,setAttCache]=useState<Record<string,{loading:boolean,dataUrl?:string,mime?:string,type?:MessageAttachmentMeta["type"],error?:string}>>({});
   const [lightbox,setLightbox]=useState<{src:string,name:string}|null>(null);
+  const [unread,setUnread]=useState<Record<string, number>>({});
+  const [dmUnreadCount,setDmUnreadCount]=useState<Record<string, number>>({});
+  const [toastFlash,setToastFlash]=useState<null|{id:string, text:string}>(null);
 
   const messagesEndRef=useRef<HTMLDivElement>(null);
   const typingTimeout=useRef<NodeJS.Timeout | null>(null);
@@ -305,6 +311,13 @@ export default function Home(){
     }
     return channels.find(c=>c.id===joinedVoice)?.name || "Sesli oda";
   },[joinedVoice, activeView, dmThreads, channels, selectedDm]);
+
+  function serverUnread(serverId: string): number {
+    return Object.entries(unread).reduce((sum,[key,n])=> key.startsWith(serverId+"/") ? sum+n : sum, 0);
+  }
+  function dmUnread(threadId: string): number {
+    return dmUnreadCount[threadId]||0;
+  }
 
   const filteredChannels = useMemo(()=>{
     if(!search.trim()) return channels;
@@ -425,6 +438,63 @@ export default function Home(){
       setMembers(next);
     });
   },[user, selectedServer]);
+
+  // Unread badge tracking: increment when a new message lands in a channel or DM we are NOT currently viewing.
+  const activeChannelKey = activeView==="server" ? `${selectedServer}/${selectedChannel}` : null;
+  useEffect(()=>{
+    if(!user || selectedServer==="demo") return;
+    const unsubs: (()=>void)[] = [];
+    channels.forEach(ch=>{
+      if(ch.type==="voice") return;
+      const key=`${selectedServer}/${ch.id}`;
+      const u = onChildAdded(ref(db,`messages/${selectedServer}/${ch.id}`),(snap)=>{
+        const m = snap.val() as ChatMessage;
+        if(!m || m.authorId===user.uid) return;
+        const isActive = activeChannelKey===key;
+        setUnread(prev=>{
+          const cur = prev[key]||0;
+          if(isActive) return {...prev, [key]:0};
+          return {...prev, [key]:cur+1};
+        });
+        if(!isActive && m.content){
+          setToastFlash({id:`${selectedServer}-${ch.id}-${snap.key}`, text: `${m.authorName||"biri"}: ${m.content.slice(0,80)}`});
+        }
+      });
+      unsubs.push(u);
+    });
+    return ()=>unsubs.forEach(u=>{try{u();}catch{}});
+  },[user, selectedServer, channels, activeChannelKey]);
+
+  // Reset unread channel count when we open a channel
+  useEffect(()=>{
+    if(activeChannelKey) setUnread(prev=>{ const n={...prev}; delete n[activeChannelKey]; return n; });
+  },[activeChannelKey]);
+
+  // DM unread: listen to all DM threads, count unseen messages
+  useEffect(()=>{
+    if(!user || dmThreads.length===0) return;
+    const unsubs = dmThreads.map(th=> onChildAdded(ref(db,`dmMessages/${th.id}`),(snap)=>{
+      const m = snap.val() as {authorId?:string, content?:string};
+      if(!m || !m.authorId || m.authorId===user.uid) return;
+      const isActive = activeView==="dms" && selectedDm===th.id;
+      setDmUnreadCount(prev=>{
+        const cur = prev[th.id]||0;
+        if(isActive) return {...prev, [th.id]:0};
+        return {...prev, [th.id]:cur+1};
+      });
+      if(!isActive && m.content){
+        setToastFlash({id:`dm-${th.id}-${snap.key}`, text:`${th.profile?.displayName||th.profile?.username||"biri"}: ${m.content.slice(0,80)}`});
+      }
+    }));
+    return ()=>unsubs.forEach(u=>{try{u();}catch{}});
+  },[user, dmThreads, activeView, selectedDm]);
+
+  // Reset DM unread when opening a DM
+  useEffect(()=>{
+    if(activeView==="dms" && selectedDm) setDmUnreadCount(prev=>{ const n={...prev}; delete n[selectedDm]; return n; });
+  },[activeView, selectedDm]);
+
+
 
 
   useEffect(()=>{
@@ -651,6 +721,13 @@ export default function Home(){
     if(typeof window!=="undefined"){ try{ localStorage.setItem("akayroom_callPipPos", JSON.stringify(callPipPos)); }catch{} }
   },[callPipPos]);
 
+  // auto-dismiss flash toast after 3s
+  useEffect(()=>{
+    if(!toastFlash) return;
+    const t = setTimeout(()=> setToastFlash(null), 3000);
+    return ()=> clearTimeout(t);
+  },[toastFlash?.id]);
+
   // poll votes: live sync per unique poll id (fixes "poll created but cannot vote")
   const pollIdsKey = useMemo(()=> messages.filter(m=>m.poll).map(m=>m.poll!.id).filter((v,i,a)=>a.indexOf(v)===i).join(","), [messages]);
   useEffect(()=>{
@@ -849,7 +926,7 @@ export default function Home(){
       const sRef=push(ref(db,"servers"));
       if(!sRef.key) return;
       const now=serverTimestamp();
-      await set(sRef,{name, ownerId:user.uid, createdAt: now});
+      await set(sRef,{name, iconUrl: newServerIcon || null, ownerId:user.uid, createdAt: now});
       await set(ref(db,`serverMembers/${sRef.key}/${user.uid}`),{role:"owner",joinedAt:now});
       await set(ref(db,`users/${user.uid}/servers/${sRef.key}`), true);
       const catId=push(ref(db,`categories/${sRef.key}`)).key!;
@@ -1199,17 +1276,9 @@ export default function Home(){
       <aside className="server-rail">
         <div className="brand-mark">GG</div>
         <div className="rail-divider"/>
-        {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).map(s=>(
-          <button key={s.id} className={`server-icon ${selectedServer===s.id && activeView==="server" ? "active":""}`} onClick={()=>{setSelectedServer(s.id); setActiveView("server");}} title={s.name}>
-            {initials(s.name)}
-          </button>
-        ))}
-        <button className="server-icon add" onClick={()=>setShowCreateServer(true)} title="Sunucu oluştur"><span className="icon"><Icon name="plus"/></span></button>
-        <button className="server-icon discover" onClick={()=>{const c=prompt("Davet kodu:"); if(c){ setJoinCode(c); joinViaInvite(); }}} title="Davetle katıl"><span className="icon"><Icon name="invite"/></span></button>
-        <div className="rail-divider" style={{marginTop:8}}/>
+        <button className={`server-icon dm ${activeView==="servers"?"active":""}`} onClick={()=>setActiveView("servers")} title="Sunucular"><span className="icon"><Icon name="grid"/></span></button>
         <button className={`server-icon dm ${activeView==="friends"?"active":""}`} onClick={()=>setActiveView("friends")} title="Arkadaşlar"><span className="icon"><Icon name="users"/></span></button>
-        <button className={`server-icon dm ${activeView==="dms"?"active":""}`} onClick={()=>setActiveView("dms")} title="Mesajlar"><span className="icon"><Icon name="dm"/></span></button>
-        <button className={`server-icon dm ${activeView==="inbox"?"active":""}`} onClick={()=>setActiveView("inbox")} title="Gelen kutusu"><span className="icon"><Icon name="inbox"/></span></button>
+        <div className="rail-divider" style={{marginTop:8}}/>
         <div style={{flex:1}}/>
         <button onClick={()=>setActiveView("profile")} style={{width:44, height:44, border:"1px solid var(--border)", background: (activeView as any)==="profile" ? "#fff" : "#111", color: (activeView as any)==="profile" ? "#000" : "#fff", display:"grid", placeItems:"center", overflow:"visible", flex:"0 0 auto", position:"relative", borderRadius:"50%"}} title="Profil">
           <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
@@ -1218,7 +1287,26 @@ export default function Home(){
       </aside>
 
       <aside className="channel-sidebar">
-        {activeView==="server" ? (
+        {activeView==="servers" ? (
+          <>
+            <div className="server-title"><strong>SUNUCULAR</strong><button className="sidebar-back" onClick={()=>setActiveView("server")} title="Geri"><span className="icon"><Icon name="minimize" size={13}/></span> ÇIKIŞ</button></div>
+            <div className="channel-scroll">
+              <button className="hub-action" onClick={()=>setShowCreateServer(true)}><span className="icon"><Icon name="plus" size={14}/></span> Sunucu Oluştur</button>
+              <button className="hub-action" onClick={()=>setShowJoinInvite(true)}><span className="icon"><Icon name="invite" size={14}/></span> Davetle Katıl</button>
+              <div className="category-label">SUNUCULARIM</div>
+              {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).length===0 && (
+                <div style={{border:"1px dashed var(--border)", padding:12, fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center", margin:"8px 0"}}>henüz sunucun yok — yukarıdan oluştur</div>
+              )}
+              {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(s=>(
+                <div key={s.id} className={`dm-item ${selectedServer===s.id ? "active": ""}`} onClick={()=>{setSelectedServer(s.id); setActiveView("server");}}>
+                  <button className="dm-av" style={{cursor:"pointer", overflow:"hidden"}}>{s.iconUrl ? <img src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span className="server-hub-initial">{initials(s.name)}</span>}</button>
+                  <div className="dm-meta"><div className="dm-name" style={{textAlign:"left"}}>{s.name}</div><div className="dm-sub">{s.memberCount ?? ""}</div></div>
+                  <span style={{marginLeft:"auto"}}>{serverUnread(s.id) > 0 && <span className="unread-badge">{serverUnread(s.id)}</span>}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : activeView==="server" ? (
           <>
             <div className="server-title">
               {isDemo ? <strong>GHOSTGRID</strong> : <strong>{selectedServerData?.name}</strong>}
@@ -1296,21 +1384,6 @@ export default function Home(){
               </>
             )}
           </>
-        ) : activeView==="dms" ? (
-          <>
-            <div className="server-title"><strong>MESAJLAR</strong><span onClick={()=>setActiveView("friends")} style={{cursor:"pointer"}}>＋</span></div>
-            <div className="channel-scroll">
-              <div className="category-label">DİREKT MESAJLAR</div>
-              {dmThreads.length===0 ? (
-                <div style={{border:"1px dashed var(--border)", padding:12, margin:"8px 0", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center"}}>henüz DM yok</div>
-              ) : dmThreads.map(th=>(
-                <div key={th.id} className={`dm-item ${selectedDm===th.id ? "active": ""}`} onClick={()=>setSelectedDm(th.id)}>
-                  <button className="dm-av" onClick={(e)=>{e.stopPropagation(); openProfile(th.otherUid);}} style={{cursor:"pointer"}}>{th.profile?.avatarUrl ? <img src={th.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(th.profile?.displayName||th.profile?.username||"??")}</button>
-                  <div className="dm-meta"><div className="dm-name">{th.profile?.displayName||th.profile?.username}</div><div className="dm-sub">@{th.profile?.username}</div></div>
-                </div>
-              ))}
-            </div>
-          </>
         ) : (activeView as any)==="profile" ? (
           <>
             <div className="server-title"><strong>PROFİL</strong></div>
@@ -1341,16 +1414,37 @@ export default function Home(){
           </>
         ) : activeView==="friends" ? (
           <>
-            <div className="server-title"><strong>ARKADAŞLAR</strong></div>
+            <div className="server-title"><strong>ARKADAŞLAR</strong><button className="sidebar-back" onClick={()=>setActiveView("server")} title="Geri"><span className="icon"><Icon name="minimize" size={13}/></span> ÇIKIŞ</button></div>
             <div className="channel-scroll">
               <div style={{display:"flex", gap:6, padding:"0 0 12px"}}>
-                {(["all","add"] as const).map(t=>(
-                  <button key={t} className={`tab ${friendsTab===t?"active":""}`} onClick={()=>setFriendsTab(t)} style={{flex:1}}>{t==="all"?"TÜMÜ":"EKLE"}</button>
+                {(["friends","inbox","dms"] as const).map(t=>(
+                  <button key={t} className={`tab ${friendsTab===t?"active":""}`} onClick={()=>setFriendsTab(t)} style={{flex:1}}>{t==="friends"?"ARKADAŞLAR":t==="inbox"?"GELEN":"MESAJLAR"}</button>
                 ))}
               </div>
-              {friendsTab==="add" ? (
-                <div style={{border:"1px solid var(--border)", padding:12, background:"var(--surface-2)"}}>
-                  <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, marginBottom:8}}>KULLANICI ADIYLA EKLE</div>
+              {friendsTab==="dms" ? (
+                dmThreads.length===0 ? (
+                  <div style={{border:"1px dashed var(--border)", padding:12, margin:"8px 0", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center"}}>henüz DM yok</div>
+                ) : dmThreads.map(th=>(
+                  <div key={th.id} className={`dm-item ${selectedDm===th.id ? "active": ""}`} onClick={()=>{setSelectedDm(th.id); setActiveView("dms");}}>
+                    <button className="dm-av" onClick={(e)=>{e.stopPropagation(); openProfile(th.otherUid);}} style={{cursor:"pointer"}}>{th.profile?.avatarUrl ? <img src={th.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(th.profile?.displayName||th.profile?.username||"??")}</button>
+                    <div className="dm-meta"><div className="dm-name">{th.profile?.displayName||th.profile?.username}</div><div className="dm-sub">@{th.profile?.username}</div></div>
+                    <span style={{marginLeft:"auto"}}>{dmUnread(th.id) > 0 && <span className="unread-badge">{dmUnread(th.id)}</span>}</span>
+                  </div>
+                ))
+              ) : friendsTab==="inbox" ? (
+                filteredMessages.length===0 ? (
+                  <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", padding:12, border:"1px dashed var(--border)", textAlign:"center"}}>
+                    bahsedilme yok — birisi seni @ ile etiketlediğinde burada görünür
+                  </div>
+                ) : filteredMessages.slice(-4).reverse().map(m=>(
+                  <div key={m.id} style={{border:"1px solid var(--border)", padding:10, marginBottom:8, background:"var(--surface-2)"}}>
+                    <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:4}}>#{channels.find(c=>c.id===m.channelId)?.name} • {fmtTime(m.createdAt)}</div>
+                    <div style={{fontSize:12}}><strong>{m.authorName}</strong>: {m.content.slice(0,80)}</div>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="category-label" style={{marginBottom:8}}>ARKADAŞ EKLE</div>
                   <div style={{display:"flex", gap:6}}>
                     <input value={friendName} onChange={e=>setFriendName(e.target.value)} placeholder="kullanici_adi" style={{flex:1, background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
                     <button className="btn btn-primary" onClick={async()=>{
@@ -1364,47 +1458,79 @@ export default function Home(){
                       await set(ref(db,`friends/${fid}/${user.uid}`), true);
                       const psnap = await get(ref(db,`users/${fid}/public`));
                       setFriends(prev=> [...prev, {uid: fid, profile: psnap.exists()? psnap.val(): null}]);
-                      setFriendName(""); setToast(`eklendi: ${clean}`); setFriendsTab("all");
+                      setFriendName(""); setToast(`eklendi: ${clean}`);
                     }}>EKLE</button>
                   </div>
-                </div>
-              ) : friends.length===0 ? (
-                <div style={{border:"1px dashed var(--border)", padding:16, textAlign:"center", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>
-                  henüz arkadaş yok
-                </div>
-              ) : friends.map(f=>(
-                <div key={f.uid} className="friend-row">
-                  <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
-                  <div style={{flex:1, minWidth:0}}>
-                    <div style={{fontSize:13, fontWeight:600}}>{f.profile?.displayName||f.profile?.username}</div>
-                    <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>@{f.profile?.username}</div>
-                  </div>
-                  <button className="btn" onClick={()=>startDM(f.uid)}>DM</button>
-                </div>
-              ))}
+                  <div className="category-label" style={{margin:"14px 0 8px"}}>ARKADAŞLARIM</div>
+                  {friends.length===0 ? (
+                    <div style={{border:"1px dashed var(--border)", padding:16, textAlign:"center", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>
+                      henüz arkadaş yok — yukarıdan kullanıcı adıyla ekle
+                    </div>
+                  ) : friends.map(f=>(
+                    <div key={f.uid} className="friend-row">
+                      <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontSize:13, fontWeight:600}}>{f.profile?.displayName||f.profile?.username}</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>@{f.profile?.username}</div>
+                      </div>
+                      <button className="btn" onClick={()=>startDM(f.uid)}>DM</button>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </>
-        ) : (
+        ) : activeView==="dms" ? (
           <>
-            <div className="server-title"><strong>GELEN KUTUSU</strong></div>
+            <div className="server-title"><strong>MESAJLAR</strong><button className="sidebar-back" onClick={()=>setActiveView("friends")} title="Geri"><span className="icon"><Icon name="minimize" size={13}/></span> ÇIKIŞ</button></div>
             <div className="channel-scroll">
-              {filteredMessages.length===0 ? (
-                <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", padding:12, border:"1px dashed var(--border)", textAlign:"center"}}>
-                  bahsedilme yok — birisi seni @ ile etiketlediğinde burada görünür
-                </div>
-              ) : filteredMessages.slice(-4).reverse().map(m=>(
-                <div key={m.id} style={{border:"1px solid var(--border)", padding:10, marginBottom:8, background:"var(--surface-2)"}}>
-                  <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:4}}>#{channels.find(c=>c.id===m.channelId)?.name} • {fmtTime(m.createdAt)}</div>
-                  <div style={{fontSize:12}}><strong>{m.authorName}</strong>: {m.content.slice(0,80)}</div>
+              <div className="category-label">DİREKT MESAJLAR</div>
+              {dmThreads.length===0 ? (
+                <div style={{border:"1px dashed var(--border)", padding:12, margin:"8px 0", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center"}}>henüz DM yok</div>
+              ) : dmThreads.map(th=>(
+                <div key={th.id} className={`dm-item ${selectedDm===th.id ? "active": ""}`} onClick={()=>setSelectedDm(th.id)}>
+                  <button className="dm-av" onClick={(e)=>{e.stopPropagation(); openProfile(th.otherUid);}} style={{cursor:"pointer"}}>{th.profile?.avatarUrl ? <img src={th.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(th.profile?.displayName||th.profile?.username||"??")}</button>
+                  <div className="dm-meta"><div className="dm-name">{th.profile?.displayName||th.profile?.username}</div><div className="dm-sub">@{th.profile?.username}</div></div>
                 </div>
               ))}
             </div>
           </>
-        )}
+        ) : null}
       </aside>
 
       <section className="chat-panel">
-        {activeView!=="server" ? (
+        {activeView==="servers" ? (
+          <>
+            <header className="chat-header">
+              <div className="channel-heading"><span className="hash">◈</span><strong>SUNUCU MERKEZİ</strong><span className="topic">sunucularını yönet ve katıl</span></div>
+              <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("server")}>←</button></div>
+            </header>
+            <div className="message-area" style={{padding:16, overflow:"auto"}}>
+              <div style={{maxWidth:640, margin:"0 auto", width:"100%", display:"flex", flexDirection:"column", gap:12}}>
+                <div style={{display:"flex", gap:10}}>
+                  <button className="hub-card" onClick={()=>setShowCreateServer(true)}><span className="hub-card-icon"><Icon name="plus" size={18}/></span><span><strong>Sunucu Oluştur</strong><em>yeni bir topluluk kur</em></span></button>
+                  <button className="hub-card" onClick={()=>setShowJoinInvite(true)}><span className="hub-card-icon"><Icon name="invite" size={18}/></span><span><strong>Davetle Katıl</strong><em>kod ile bir sunucuya gir</em></span></button>
+                </div>
+                <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", letterSpacing:".06em", marginTop:8}}>SUNUCULARIM</div>
+                <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                  {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(s=>(
+                    <div key={s.id} className="server-portfolio-card" onClick={()=>{setSelectedServer(s.id); setActiveView("server");}}>
+                      <div className="spc-icon">{s.iconUrl ? <img src={s.iconUrl} alt=""/> : initials(s.name)}</div>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontWeight:700, fontSize:14}}>{s.name}</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>{s.description || "sohbet etmeye hazır"}</div>
+                      </div>
+                      <span className="spc-go">GİR →</span>
+                    </div>
+                  ))}
+                  {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).length===0 && (
+                    <div style={{border:"1px dashed var(--border)", padding:16, textAlign:"center", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>henüz sunucun yok — oluştur veya kod ile katıl</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        ) : activeView!=="server" ? (
           (activeView as any)==="profile" ? (
             <>
               <header className="chat-header">
@@ -1503,7 +1629,7 @@ export default function Home(){
             <>
               <header className="chat-header">
                 <div className="channel-heading"><span className="hash"><span className="icon"><Icon name="dm"/></span></span><strong>{dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName || "MESAJLAR"}</strong><span className="topic">uçtan uca • RTDB</span></div>
-                <div className="header-actions"><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{void startDMCall();}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid #fff":"1px solid var(--border)",background:joinedVoice===selectedDm?"#fff":"transparent",color:joinedVoice===selectedDm?"#000":"var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button></div>
+                <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("friends")} title="Arkadaşlara dön">←</button><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{void startDMCall();}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid #fff":"1px solid var(--border)",background:joinedVoice===selectedDm?"#fff":"transparent",color:joinedVoice===selectedDm?"#000":"var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button></div>
               </header>
               <div className="message-area" style={{padding:16}}>
                 {!selectedDm ? (
@@ -1532,6 +1658,7 @@ export default function Home(){
             <>
               <header className="chat-header">
                 <div className="channel-heading"><span className="hash">◉</span><strong>ARKADAŞLAR</strong><span className="topic">{friends.length} kişi</span></div>
+                <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("server")}>←</button></div>
               </header>
               <div className="page-panel">
                 {friends.length===0 ? (
@@ -1905,19 +2032,17 @@ export default function Home(){
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-head"><span>SUNUCU OLUŞTUR</span><button onClick={()=>setShowCreateServer(false)}>✕</button></div>
             <div className="modal-body">
+              <div className="icon-upload">
+                {newServerIcon ? <img src={newServerIcon} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
+                <label className="icon-upload-btn">FOTOĞRAF SEÇ<input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>setNewServerIcon(String(r.result)); r.readAsDataURL(f);}} /></label>
+                {newServerIcon && <button className="icon-upload-btn" onClick={()=>setNewServerIcon("")}>KALDIR</button>}
+              </div>
               <label>SUNUCU ADI</label>
               <input value={newServerName} onChange={e=>setNewServerName(e.target.value)} placeholder="ghost-ops" autoFocus />
-              <div style={{marginTop:12, borderTop:"1px solid var(--border)", paddingTop:12}}>
-                <label>DAVET KODUYLA KATIL</label>
-                <div style={{display:"flex", gap:6}}>
-                  <input value={joinCode} onChange={e=>setJoinCode(e.target.value)} placeholder="ABC123" style={{flex:1}} />
-                   <button className="btn" onClick={joinViaInvite} disabled={joiningInvite}>{joiningInvite ? "..." : "KATIL"}</button>
-                </div>
-              </div>
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={()=>setShowCreateServer(false)}>İPTAL</button>
-              <button className="btn btn-primary" onClick={createServer} disabled={!newServerName.trim() || creatingServer}>{creatingServer ? "OLUŞTURULUYOR..." : "OLUŞTUR"}</button>
+              <button className="btn btn-primary" onClick={()=>{ createServer(); setNewServerIcon(""); }} disabled={!newServerName.trim() || creatingServer}>{creatingServer ? "OLUŞTURULUYOR..." : "OLUŞTUR"}</button>
             </div>
           </div>
         </div>
@@ -1980,6 +2105,29 @@ export default function Home(){
                   <button className="btn" style={{marginTop:8, borderColor:"#000"}} onClick={()=>{navigator.clipboard.writeText(inviteCode); setToast("kopyalandı");}}>KOPYALA</button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showJoinInvite && (
+        <div className="modal-backdrop" onClick={()=>setShowJoinInvite(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-head"><span>DAVETLE KATIL</span><button onClick={()=>setShowJoinInvite(false)}>✕</button></div>
+            <div className="modal-body">
+              <div className="join-invite-card">
+                <div className="join-invite-icon"><span className="icon"><Icon name="invite" size={26}/></span></div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontWeight:800, fontSize:16}}>Bir davet kodun mu var?</div>
+                  <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", marginTop:4}}>6 haneli kodu gir, arkadaşlarının sunucusuna katıl.</div>
+                </div>
+                <div className="join-invite-input">
+                  <span className="join-invite-caret">›</span>
+                  <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6))} placeholder="ABC123" autoFocus maxLength={6} />
+                  <button className="btn btn-primary" onClick={async()=>{ if(!joinCode.trim())return; setJoiningInvite(true); setShowJoinInvite(false); await joinViaInvite(); setJoiningInvite(false); }} disabled={joiningInvite || joinCode.length!==6}>{joiningInvite ? "..." : "KATIL"}</button>
+                </div>
+                <button className="btn" onClick={()=>setShowCreateServer(true)} style={{alignSelf:"center", borderColor:"var(--border)", background:"transparent"}}>ya da yeni bir sunucu oluştur →</button>
+              </div>
             </div>
           </div>
         </div>
@@ -2243,6 +2391,10 @@ export default function Home(){
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-head"><span>SUNUCU — {selectedServerData?.name}</span><button onClick={()=>setShowServerSettings(false)}>✕</button></div>
             <div className="modal-body">
+              <div className="icon-upload">
+                {selectedServerData?.iconUrl ? <img src={selectedServerData.iconUrl} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
+                <label className="icon-upload-btn">FOTOĞRAF<input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ update(ref(db,`servers/${selectedServer}`),{iconUrl:String(r.result)}).catch(()=>{}); setToast("güncellendi"); }; r.readAsDataURL(f);}} /></label>
+              </div>
               <label>SUNUCU ADI</label>
               <input defaultValue={selectedServerData?.name} onBlur={e=>{
                 if(!e.target.value.trim()) return;
@@ -2527,6 +2679,8 @@ export default function Home(){
           </div>
         </div>
       )}
+      {toastFlash && <div className="flash-toast">{toastFlash.text}</div>}
+      {toast && <div className="toast">{toast}</div>}
       {incomingCall && !joinedVoice && (
         <div className="call-overlay">
           <div className="call-window">
