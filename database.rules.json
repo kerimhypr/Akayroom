@@ -101,6 +101,17 @@
         }
       }
     },
+    "attachments": {
+      "$serverId": {
+        "$channelId": {
+          ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
+          "$messageId": {
+            ".write": "auth != null && (!data.exists() && newData.child('authorId').val() === auth.uid || data.exists() && data.child('authorId').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['authorId', 'data'])"
+          }
+        }
+      }
+    },
     "reactions": {
       "$serverId": {
         "$channelId": {

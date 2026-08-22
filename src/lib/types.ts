@@ -66,6 +66,12 @@ export type Attachment = {
   url: string;
 };
 
+export type MessageAttachmentMeta = {
+  type: "image" | "video" | "audio" | "file";
+  name: string;
+  size: number;
+};
+
 export type Reaction = {
   emoji: string;
   count: number;
@@ -100,6 +106,7 @@ export type ChatMessage = {
   replyTo?: { id: string; authorName?: string; content: string } | null;
   reactions?: Record<string, Reaction>;
   attachments?: Attachment[];
+  attachment?: MessageAttachmentMeta | null;
   pinned?: boolean;
   isAiTwin?: boolean;
   twinOfUid?: string;

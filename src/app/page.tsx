@@ -26,9 +26,34 @@ import { auth, db, firebaseConfigured } from "@/lib/firebase";
 import { rtcIceServers, joinSignalRoom, listenForParticipants, listenForCandidates, publishCandidate, publishOffer, publishAnswer, listenForOffers, listenForAnswers, deterministicInitiator, cleanupSignalRoom } from "@/lib/webrtc";
 import { createStarterServer } from "@/lib/seed";
 import { normalizeUsername, usernameEmail, validUsername } from "@/lib/username";
-import type { Channel, ChatMessage, Category, Server, UserProfile } from "@/lib/types";
+import type { Channel, ChatMessage, Category, MessageAttachmentMeta, Server, UserProfile } from "@/lib/types";
 
 function initials(v: string) { return (v?.trim()?.slice(0,2) || "??").toUpperCase(); }
+function fmtSize(bytes: number){ if(!bytes && bytes!==0) return ""; if(bytes<1024) return bytes+" B"; if(bytes<1024*1024) return (bytes/1024).toFixed(0)+" KB"; return (bytes/1024/1024).toFixed(1)+" MB"; }
+function fileToDataUrl(file: File): Promise<string>{ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=()=>rej(new Error("okunamadı")); r.readAsDataURL(file); }); }
+async function compressImage(file: File): Promise<string>{
+  try{
+    const bitmap = await createImageBitmap(file);
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(bitmap.width*scale));
+    c.height = Math.max(1, Math.round(bitmap.height*scale));
+    const ctx = c.getContext("2d");
+    if(!ctx) throw new Error("canvas yok");
+    ctx.drawImage(bitmap, 0, 0, c.width, c.height);
+    bitmap.close?.();
+    return c.toDataURL("image/jpeg", 0.82);
+  }catch{
+    return fileToDataUrl(file);
+  }
+}
+function attachmentKind(f: File): MessageAttachmentMeta["type"]{
+  if(f.type.startsWith("image/")) return "image";
+  if(f.type.startsWith("video/")) return "video";
+  if(f.type.startsWith("audio/")) return "audio";
+  return "file";
+}
 function fmtTime(ts: number) { try { return new Date(ts).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});} catch{ return "--:--"; } }
 function fmtDate(ts: number) { try{ return new Date(ts).toLocaleDateString("tr-TR",{day:"2-digit",month:"long",year:"numeric"});}catch{return "";} }
 
@@ -184,7 +209,6 @@ export default function Home(){
   const [typingUsers,setTypingUsers]=useState<Record<string,{username:string,timestamp:number}>>({});
   const [showEmoji,setShowEmoji]=useState(false);
   const [showGif,setShowGif]=useState(false);
-  const [showStickers,setShowStickers]=useState(false);
   const [showPlusMenu,setShowPlusMenu]=useState(false);
   const [showPoll,setShowPoll]=useState(false);
   const [pollQ,setPollQ]=useState("");
@@ -244,6 +268,10 @@ export default function Home(){
   const [selectedProfile,setSelectedProfile]=useState<UserProfile|null>(null);
   const [profileLoading,setProfileLoading]=useState(false);
   const [showLanding,setShowLanding]=useState(true);
+  const [pendingFile,setPendingFile]=useState<{file:File,preview?:string}|null>(null);
+  const [sendingAttachment,setSendingAttachment]=useState(false);
+  const [attCache,setAttCache]=useState<Record<string,{loading:boolean,dataUrl?:string,mime?:string,type?:MessageAttachmentMeta["type"],error?:string}>>({});
+  const [lightbox,setLightbox]=useState<{src:string,name:string}|null>(null);
 
   const messagesEndRef=useRef<HTMLDivElement>(null);
   const typingTimeout=useRef<NodeJS.Timeout | null>(null);
@@ -613,23 +641,89 @@ export default function Home(){
   async function sendMessage(e?:React.FormEvent){
     if(e) e.preventDefault();
     const content=draft.trim();
-    if(!content || !user || selectedServer==="demo" || selectedChannelData?.type!=="text") return;
-    if(content.startsWith("/")){
+    if(!user || selectedServer==="demo") return;
+    if(!content && !pendingFile) return;
+    if(content && !pendingFile && selectedChannelData?.type!=="text") return;
+    if(!selectedChannelData || selectedChannelData.type==="voice"){ setToast("ses kanalına mesaj gönderilmez"); return; }
+    if(sendingAttachment) return;
+    if(content.startsWith("/") && !pendingFile){
       handleCommand(content);
       setDraft(""); updateDraft("");
       remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
       return;
     }
+    let attMeta: MessageAttachmentMeta | null = null;
+    let attData: string | null = null;
+    if(pendingFile){
+      setSendingAttachment(true);
+      try{
+        const kind = attachmentKind(pendingFile.file);
+        attMeta = { type: kind, name: pendingFile.file.name, size: pendingFile.file.size };
+        attData = (kind==="image" && pendingFile.preview) ? pendingFile.preview : await fileToDataUrl(pendingFile.file);
+        if(attData.length > 9.5*1024*1024){ setToast("dosya çok büyük — sıkıştırılamadı"); setSendingAttachment(false); return; }
+      }catch{
+        setToast("dosya okunamadı");
+        setSendingAttachment(false);
+        return;
+      }
+    }
     const msgRef=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
     const payload: any = {
       serverId:selectedServer, channelId:selectedChannel, authorId:user.uid,
-      content, authorName: profile?.displayName ?? profile?.username ?? username ?? "anon",
+      content: content || (attMeta ? `📎 ${attMeta.name}` : ""),
+      authorName: profile?.displayName ?? profile?.username ?? username ?? "anon",
       createdAt: Date.now(),
     };
+    if(attMeta) payload.attachment = attMeta;
     if(replyTo) payload.replyTo={ id: replyTo.id, authorName: replyTo.authorName, content: replyTo.content.slice(0,120) };
     await set(msgRef,payload);
-    setDraft(""); updateDraft(""); setReplyTo(null);
+    if(attMeta && attData && msgRef.key){
+      try{
+        await set(ref(db,`attachments/${selectedServer}/${selectedChannel}/${msgRef.key}`),{authorId:user.uid,type:attMeta.type,name:attMeta.name,mime:pendingFile?.file.type||"application/octet-stream",size:attMeta.size,data:attData});
+      }catch{ setToast("ek yüklenemedi"); }
+    }
+    setDraft(""); updateDraft(""); setReplyTo(null); setPendingFile(null); setSendingAttachment(false);
     remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
+  }
+
+  function handleFileSelected(file: File){
+    if(!user || selectedServer==="demo"){ setToast("önce bir sunucuya katıl"); return; }
+    const kind = attachmentKind(file);
+    const cap = (kind==="video"||kind==="audio") ? 5*1024*1024 : (kind==="image" ? 15*1024*1024 : 2*1024*1024);
+    if(file.size > cap){ setToast(`çok büyük — ${kind==="file"?"dosya":"medya"} sınırı ${fmtSize(cap)}`); return; }
+    setShowPlusMenu(false);
+    if(kind==="image"){
+      compressImage(file).then(preview=>setPendingFile({file,preview})).catch(()=>setPendingFile({file}));
+    } else {
+      setPendingFile({file});
+    }
+  }
+
+  async function loadAttachment(m: ChatMessage){
+    if(!m.attachment) return;
+    setAttCache(prev=>({...prev,[m.id]:{loading:true}}));
+    try{
+      const s=await get(ref(db,`attachments/${m.serverId}/${m.channelId}/${m.id}`));
+      if(s.exists()){
+        const v=s.val() as {data:string,mime?:string,type?:MessageAttachmentMeta["type"]};
+        setAttCache(prev=>({...prev,[m.id]:{loading:false,dataUrl:v.data,mime:v.mime,type:v.type}}));
+      } else {
+        setAttCache(prev=>({...prev,[m.id]:{loading:false,error:"ek bulunamadı"}}));
+      }
+    }catch{
+      setAttCache(prev=>({...prev,[m.id]:{loading:false,error:"ek açılamadı"}}));
+    }
+  }
+
+  async function downloadAttachment(m: ChatMessage){
+    if(!m.attachment) return;
+    let c=attCache[m.id];
+    if(!c?.dataUrl){ await loadAttachment(m); c=attCache[m.id]; }
+    const dataUrl=c?.dataUrl;
+    if(!dataUrl){ setToast(c?.error||"indirilemedi"); return; }
+    const a=document.createElement("a");
+    a.href=dataUrl; a.download=m.attachment.name||"dosya";
+    document.body.appendChild(a); a.click(); a.remove();
   }
 
   function handleCommand(cmd:string){
@@ -688,6 +782,7 @@ export default function Home(){
     if(!confirm("kanalı silmek istiyor musun? mesajlar da silinecek.")) return;
     await remove(ref(db,`channels/${selectedServer}/${channelId}`));
     await remove(ref(db,`messages/${selectedServer}/${channelId}`));
+    await remove(ref(db,`attachments/${selectedServer}/${channelId}`)).catch(()=>{});
     await remove(ref(db,`signaling/${channelId}`));
     if(selectedChannel===channelId){
       const remaining = channels.filter(c=>c.id!==channelId);
@@ -1319,7 +1414,7 @@ export default function Home(){
               </div>
             </header>
 
-            <div className="message-area" onClick={()=>{setShowEmoji(false); setShowGif(false); setShowStickers(false); setShowPlusMenu(false);}}>
+            <div className="message-area" onClick={()=>{setShowEmoji(false); setShowGif(false); setShowPlusMenu(false);}}>
               {isDemo ? (
                 <div className="welcome animate-slide">
                   <div className="welcome-icon">◈</div>
@@ -1367,6 +1462,36 @@ export default function Home(){
                           ) : (
                             <div className="msg-content"><RenderContent text={m.content} /></div>
                           )}
+                          {m.attachment && (()=>{
+                            const c = attCache[m.id];
+                            const meta = m.attachment;
+                            if(meta.type==="image"){
+                              return c?.dataUrl ? (
+                                <img src={c.dataUrl} alt={meta.name} style={{marginTop:6, maxWidth:"100%", maxHeight:340, border:"1px solid var(--border)", cursor:"zoom-in", display:"block"}} onClick={()=>setLightbox({src:c.dataUrl!, name:meta.name})}/>
+                              ) : (
+                                <button style={{marginTop:6}} className="btn" onClick={()=>loadAttachment(m)} disabled={c?.loading}>{c?.loading ? "yükleniyor…" : `🖼 ${meta.name} (${fmtSize(meta.size)}) — göster`}</button>
+                              );
+                            }
+                            if(meta.type==="video"){
+                              return c?.dataUrl ? (
+                                <video src={c.dataUrl} controls style={{marginTop:6, maxWidth:"100%", maxHeight:380, border:"1px solid var(--border)", display:"block"}}/>
+                              ) : (
+                                <button style={{marginTop:6}} className="btn" onClick={()=>loadAttachment(m)} disabled={c?.loading}>{c?.loading ? "yükleniyor…" : `▶ ${meta.name} (${fmtSize(meta.size)}) — oynat`}</button>
+                              );
+                            }
+                            if(meta.type==="audio"){
+                              return c?.dataUrl ? (
+                                <audio src={c.dataUrl} controls style={{marginTop:6, width:"100%", display:"block"}}/>
+                              ) : (
+                                <button style={{marginTop:6}} className="btn" onClick={()=>loadAttachment(m)} disabled={c?.loading}>{c?.loading ? "yükleniyor…" : `♪ ${meta.name} (${fmtSize(meta.size)})`}</button>
+                              );
+                            }
+                            return c?.error ? (
+                              <div style={{marginTop:6, fontFamily:"var(--font-mono)", fontSize:10, color:"#f23f42", border:"1px dashed var(--border)", padding:"4px 8px", display:"inline-block"}}>{c.error}</div>
+                            ) : (
+                              <button style={{marginTop:6}} className="btn" onClick={()=>downloadAttachment(m)} disabled={c?.loading}>⎘ {c?.loading ? "hazırlanıyor…" : `${meta.name} (${fmtSize(meta.size)}) — indir`}</button>
+                            );
+                          })()}
                           {m.poll && (
                             <div className="poll">
                               <q>{m.poll.question}</q>
@@ -1418,6 +1543,20 @@ export default function Home(){
 
             {!isDemo && selectedChannelData?.type!=="voice" && (
               <div className="composer-wrap">
+                {pendingFile && (
+                  <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:"6px 8px", marginBottom:6, display:"flex", alignItems:"center", gap:8}}>
+                    {pendingFile.preview ? (
+                      <img src={pendingFile.preview} alt="" style={{width:36, height:36, objectFit:"cover", border:"1px solid var(--border)"}}/>
+                    ) : (
+                      <div style={{width:36, height:36, border:"1px solid var(--border)", display:"grid", placeItems:"center", fontSize:14}}>{attachmentKind(pendingFile.file)==="video" ? "🎬" : attachmentKind(pendingFile.file)==="audio" ? "♪" : "📎"}</div>
+                    )}
+                    <div style={{flex:1, minWidth:0}}>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{pendingFile.file.name}</div>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>{fmtSize(pendingFile.file.size)}{sendingAttachment ? " — gönderiliyor…" : " — Enter ile gönder"}</div>
+                    </div>
+                    <button onClick={()=>{ if(!sendingAttachment) setPendingFile(null); }} style={{border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", width:22, height:22}}>✕</button>
+                  </div>
+                )}
                 {replyTo && (
                   <div className="composer-reply">
                     <span>↳ <strong>{replyTo.authorName}</strong> — {replyTo.content.slice(0,60)}</span>
@@ -1439,17 +1578,16 @@ export default function Home(){
                   </div>
                   <div className="composer-actions">
                     <button type="button" onClick={()=>setShowGif(v=>!v)} title="GIF">GIF</button>
-                    <button type="button" onClick={()=>setShowStickers(v=>!v)} title="Sticker">✦</button>
+                    <button type="button" onClick={()=>setShowEmoji(v=>!v)} title="Emoji & Sticker">☺</button>
                     <button type="button" onClick={()=>setShowEmoji(v=>!v)} title="Emoji">☺</button>
                     <button type="submit" className="send-button" disabled={!draft.trim()} title="Gönder"><span className="icon"><Icon name="send" size={18}/></span></button>
                   </div>
                 </form>
                 {showPlusMenu && (
                   <div style={{position:"absolute", bottom:52, left:12, background:"var(--surface)", border:"1px solid var(--border)", padding:6, display:"flex", gap:6, zIndex:5}}>
-                    <label style={{border:"1px solid var(--border)", padding:"6px 8px", fontFamily:"var(--font-mono)", fontSize:11, cursor:"pointer"}}>DOSYA<input type="file" hidden onChange={e=>{const f=e.target.files?.[0]; if(!f) return; setToast(`dosya: ${f.name}`); updateDraft(draft + ` [dosya: ${f.name}]`); setShowPlusMenu(false);}} /></label>
+                    <label style={{border:"1px solid var(--border)", padding:"6px 8px", fontFamily:"var(--font-mono)", fontSize:11, cursor:"pointer"}}>DOSYA<input type="file" hidden accept="image/*,video/*,audio/*,.pdf,.zip,.txt,.doc,.docx,.json,.csv,.mp4,.webm" onChange={e=>{const f=e.target.files?.[0]; if(f) handleFileSelected(f); e.currentTarget.value="";}} /></label>
                     <button className="btn" onClick={()=>{setShowPoll(true); setShowPlusMenu(false);}}>POLL</button>
                     <button className="btn" onClick={()=>{setShowGif(true); setShowPlusMenu(false);}}>GIF</button>
-                    <button className="btn" onClick={()=>{setShowStickers(true); setShowPlusMenu(false);}}>STICKER</button>
                   </div>
                 )}
                 {showPoll && (
@@ -1478,9 +1616,8 @@ export default function Home(){
               </div>
             )}
 
-            {showEmoji && <div className="picker"><div className="picker-title">EMOJI <button onClick={()=>setShowEmoji(false)}>✕</button></div><div className="emoji-grid">{EMOJIS.map(e=><button key={e} onClick={()=>{updateDraft(draft + e); setShowEmoji(false);}}>{e}</button>)}</div></div>}
+            {showEmoji && <div className="picker"><div className="picker-title">EMOJİ & STICKER <button onClick={()=>setShowEmoji(false)}>✕</button></div><div className="emoji-grid">{EMOJIS.map(e=><button key={"e"+e} onClick={()=>{updateDraft(draft + e); setShowEmoji(false);}}>{e}</button>)}{STICKERS.map(s=><button key={"s"+s} onClick={()=>{updateDraft(draft + s); setShowEmoji(false);}}>{s}</button>)}</div></div>}
             {showGif && <div className="picker"><div className="picker-title">GIF <button onClick={()=>setShowGif(false)}>✕</button></div><div className="picker-search"><input value={gifSearch} onChange={e=>setGifSearch(e.target.value)} onKeyDown={e=> e.key==="Enter" && searchGifs()} placeholder="ara..." /><button onClick={searchGifs}>ARA</button></div><div className="gif-grid">{gifResults.map(u=><button key={u} onClick={()=>{updateDraft(draft + " " + u); setShowGif(false);}}><img src={u} alt="gif" /></button>)}{gifResults.length===0 && <div style={{gridColumn:"1 / -1", fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:8, border:"1px dashed var(--border)", textAlign:"center"}}>giphy — API boşsa çalışmaz</div>}</div></div>}
-            {showStickers && <div className="picker"><div className="picker-title">STICKER <button onClick={()=>setShowStickers(false)}>✕</button></div><div className="sticker-grid">{STICKERS.map(s=><button key={s} onClick={()=>{updateDraft(draft + " " + s); setShowStickers(false);}}>{s}</button>)}</div></div>}
 
             {showThread && (
               <div className="thread-drawer">
@@ -1879,6 +2016,7 @@ export default function Home(){
                     remove(ref(db,`serverMembers/${selectedServer}`)).catch(()=>{});
                     remove(ref(db,`channels/${selectedServer}`)).catch(()=>{});
                     remove(ref(db,`categories/${selectedServer}`)).catch(()=>{});
+                    remove(ref(db,`attachments/${selectedServer}`)).catch(()=>{});
                     if(joinedVoice) setJoinedVoice(null);
                     setSelectedServer("demo");
                     setSelectedChannel("general");
@@ -1945,6 +2083,17 @@ export default function Home(){
                 </>
               ) : <div style={{fontFamily:"var(--font-mono)", fontSize:11}}>bulunamadı</div>}
             </div>
+          </div>
+        </div>
+      )}
+      {lightbox && (
+        <div className="modal-backdrop" style={{zIndex:60}} onClick={()=>setLightbox(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{maxWidth:"92vw", maxHeight:"88vh", display:"flex", flexDirection:"column", gap:8}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", fontFamily:"var(--font-mono)", fontSize:11}}>
+              <span>{lightbox.name}</span>
+              <button onClick={()=>setLightbox(null)} style={{border:"1px solid #fff", background:"#000", color:"#fff", width:26, height:26}}>✕</button>
+            </div>
+            <img src={lightbox.src} alt={lightbox.name} style={{maxWidth:"92vw", maxHeight:"82vh", border:"2px solid #fff", objectFit:"contain"}}/>
           </div>
         </div>
       )}
