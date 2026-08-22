@@ -546,6 +546,9 @@ html { scroll-behavior: smooth; }
 .call-controls button.active { background:#fff; color:#000; }
 .call-controls button:hover { border-color:#fff; }
 .call-controls button.danger { background:#ff4444; color:#fff; width:auto; padding:0 14px; gap:6px; border-radius:22px; }
+.call-controls button.accept { background:#1db954; color:#fff; width:auto; padding:0 14px; gap:6px; border-radius:22px; }
+.call-card.incoming-pulse { border-color:#fff; box-shadow: 0 0 0 0 rgba(255,255,255,.5); animation: ringPulse 1.2s infinite; }
+@keyframes ringPulse { 0%{ box-shadow:0 0 0 0 rgba(255,255,255,.55);} 70%{ box-shadow:0 0 0 12px rgba(255,255,255,0);} 100%{ box-shadow:0 0 0 0 rgba(255,255,255,0);} }
 .call-audios { display:none; }
 
 /* Call picture-in-picture (draggable) */

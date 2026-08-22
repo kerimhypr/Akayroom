@@ -264,6 +264,18 @@
         }
       }
     },
+    "dmSignaling": {
+      "$threadId": {
+        ".read": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()"
+      }
+    },
+    "dmCalls": {
+      "$threadId": {
+        ".read": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()"
+      }
+    },
     "aiJobs": {
       ".read": false,
       ".write": false

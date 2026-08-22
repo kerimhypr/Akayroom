@@ -23,7 +23,7 @@ import {
   update,
 } from "firebase/database";
 import { auth, db, firebaseConfigured } from "@/lib/firebase";
-import { rtcIceServers, joinSignalRoom, listenForParticipants, listenForCandidates, publishCandidate, publishOffer, publishAnswer, listenForOffers, listenForAnswers, deterministicInitiator, cleanupSignalRoom } from "@/lib/webrtc";
+import { rtcIceServers, joinSignalRoom, listenForParticipants, listenForCandidates, publishCandidate, publishOffer, publishAnswer, listenForOffers, listenForAnswers, deterministicInitiator, cleanupSignalRoom, ringDmCall, acceptDmCall, endDmCall, listenDmCall } from "@/lib/webrtc";
 import { createStarterServer } from "@/lib/seed";
 import { normalizeUsername, usernameEmail, validUsername } from "@/lib/username";
 import type { Channel, ChatMessage, Category, MessageAttachmentMeta, Server, UserConnections, UserProfile } from "@/lib/types";
@@ -257,6 +257,7 @@ export default function Home(){
   const [joinedVoice,setJoinedVoice]=useState<string|null>(null);
   const [micMuted,setMicMuted]=useState(false);
   const [deafen,setDeafen]=useState(false);
+  const [incomingCall,setIncomingCall]=useState<null|{threadId:string, fromUid:string, fromName?:string}>(null);
   const [callPip,setCallPip]=useState(false);
   const [callPipPos,setCallPipPos]=useState(()=>{
     if(typeof window!=="undefined"){ try{ const p=JSON.parse(localStorage.getItem("akayroom_callPipPos")||"null"); if(p&&typeof p.x==="number"&&typeof p.y==="number") return p; }catch{} }
@@ -479,7 +480,8 @@ export default function Home(){
 
   // Voice: real WebRTC mesh via Firebase signaling
   useEffect(()=>{
-    if(!user || !joinedVoice || selectedServer==="demo"){
+    const isDMCall = activeView==="dms" && !!joinedVoice;
+    if(!user || !joinedVoice || (!isDMCall && selectedServer==="demo")){
       if(localStreamRef.current){
         localStreamRef.current.getTracks().forEach(tr=>tr.stop());
         localStreamRef.current = null;
@@ -491,6 +493,8 @@ export default function Home(){
       return;
     }
     const myUid = user.uid;
+    const room = `${isDMCall ? "dmSignaling" : "signaling"}/${joinedVoice}`;
+    const serverIdSignal = isDMCall ? null : selectedServer;
     let cancelled = false;
     let leaveRoom: (()=>void)|null = null;
     let unsubParticipants: (()=>void)|null = null;
@@ -503,8 +507,8 @@ export default function Home(){
         if(cancelled){ stream.getTracks().forEach(tr=>tr.stop()); return; }
         localStreamRef.current = stream;
         stream.getAudioTracks().forEach(tr=> tr.enabled = !micMuted);
-        leaveRoom = joinSignalRoom(joinedVoice!, selectedServer, myUid);
-        unsubParticipants = listenForParticipants(joinedVoice!, (uid, added)=>{
+        leaveRoom = joinSignalRoom(room, serverIdSignal, myUid);
+        unsubParticipants = listenForParticipants(room, (uid, added)=>{
           if(uid===user!.uid) return;
           if(added){
             get(ref(db, `users/${uid}/public`)).then(s=>{
@@ -520,7 +524,7 @@ export default function Home(){
             if(pc){ try{pc.close();}catch{}; delete pcsRef.current[uid]; }
           }
         });
-        const snap = await get(ref(db, `signaling/${joinedVoice}/participants`));
+        const snap = await get(ref(db, `${room}/participants`));
         if(snap.exists()){
           const vals = snap.val() as Record<string, any>;
           for(const uid of Object.keys(vals)){
@@ -533,11 +537,11 @@ export default function Home(){
             }
           }
         }
-        unsubOffers = listenForOffers(joinedVoice!, myUid, async (fromUid, offer)=>{
+        unsubOffers = listenForOffers(room, myUid, async (fromUid, offer)=>{
           if(pcsRef.current[fromUid]) return;
           await createPeer(fromUid, stream, false, offer);
         });
-        unsubAnswers = listenForAnswers(joinedVoice!, myUid, async (fromUid, answer)=>{
+        unsubAnswers = listenForAnswers(room, myUid, async (fromUid, answer)=>{
           const pc = pcsRef.current[fromUid];
           if(pc && pc.signalingState !== "stable"){
             try{ await pc.setRemoteDescription(new RTCSessionDescription(answer)); }catch{}
@@ -553,9 +557,9 @@ export default function Home(){
             setRemoteStreams(prev=> ({...prev, [remoteUid]: stream}));
           };
           pc.onicecandidate = (e)=>{
-            if(e.candidate) void publishCandidate(joinedVoice!, myUid, remoteUid, e.candidate);
+            if(e.candidate) void publishCandidate(room, myUid, remoteUid, e.candidate);
           };
-          const unsub = listenForCandidates(joinedVoice!, remoteUid, myUid, async (cand)=>{
+          const unsub = listenForCandidates(room, remoteUid, myUid, async (cand)=>{
             try{ await pc.addIceCandidate(new RTCIceCandidate(cand)); }catch{}
           });
           candidateUnsubs.push(unsub);
@@ -569,12 +573,12 @@ export default function Home(){
               if(createOffer){
                 const offer = await pc.createOffer({offerToReceiveAudio:true});
                 await pc.setLocalDescription(offer);
-                await publishOffer(joinedVoice!, myUid, remoteUid, offer);
+                await publishOffer(room, myUid, remoteUid, offer);
               } else if(remoteOffer){
                 await pc.setRemoteDescription(new RTCSessionDescription(remoteOffer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                await publishAnswer(joinedVoice!, myUid, remoteUid, answer);
+                await publishAnswer(room, myUid, remoteUid, answer);
               }
             }catch{}
           })();
@@ -600,18 +604,47 @@ export default function Home(){
       Object.values(pcsRef.current).forEach(pc=>{ try{pc.close();}catch{} });
       pcsRef.current = {};
     };
-  },[user, joinedVoice, selectedServer]);
+  },[user, joinedVoice, selectedServer, activeView]);
 
   // mic mute
   useEffect(()=>{
     if(localStreamRef.current){
       localStreamRef.current.getAudioTracks().forEach(tr=> tr.enabled = !micMuted);
-    }
-  },[micMuted]);
+    }  },[micMuted]);
   // deafen -> mute remote playback
   useEffect(()=>{
     document.querySelectorAll<HTMLAudioElement>("audio[data-voice]").forEach(a=>{ a.volume = deafen ? 0 : 1; });
   },[deafen, remoteStreams]);
+
+  // listen for incoming DM calls on all DM threads
+  useEffect(()=>{
+    if(!user || dmThreads.length===0){ setIncomingCall(null); return; }
+    const unsubs = dmThreads.map(t=> listenDmCall(t.id, (snap)=>{
+      if(!snap){ return; }
+      const fromUid = snap.fromUid as string|undefined;
+      const status = snap.status as string|undefined;
+      const endedBy = snap.endedBy as string|undefined;
+      const acceptedBy = snap.acceptedBy as string|undefined;
+      if(!fromUid || fromUid===user.uid) return;
+      if(endedBy){ setIncomingCall(prev=> prev?.threadId===t.id ? null : prev); return; }
+      if(acceptedBy){ setIncomingCall(prev=> prev?.threadId===t.id ? null : prev); return; }
+      if(status==="ringing"){
+        setIncomingCall({threadId:t.id, fromUid});
+      }
+    }));
+    return ()=>unsubs.forEach(u=>{ try{u();}catch{} });
+  },[user, dmThreads]);
+
+  // resolve caller name for incoming call
+  useEffect(()=>{
+    if(!incomingCall?.fromUid){ return; }
+    get(ref(db, `users/${incomingCall.fromUid}/public`)).then(s=>{
+      if(s.exists()){
+        const p=s.val() as {displayName?:string, username?:string};
+        setIncomingCall(c=> c ? {...c, fromName: p.displayName || p.username} : c);
+      }
+    }).catch(()=>{});
+  },[incomingCall?.fromUid]);
 
   // persist pip position
   useEffect(()=>{
@@ -867,6 +900,51 @@ export default function Home(){
     setJoinedVoice(selectedChannel);
     setCallPip(false);
     setToast(`arama başlatıldı — #${selectedChannelData.name}`);
+  }
+
+  async function startDMCall(){
+    if(!user || !selectedDm) return;
+    const thread = dmThreads.find(d=>d.id===selectedDm);
+    const otherUid = thread?.otherUid;
+    if(joinedVoice===selectedDm){
+      await endDmCall(selectedDm, user.uid).catch(()=>{});
+      setJoinedVoice(null);
+      setToast("DM araması sona erdi");
+      return;
+    }
+    if(!otherUid){ setToast("karşı taraf bulunamadı"); return; }
+    await endDmCall(selectedDm, user.uid).catch(()=>{});
+    await ringDmCall(selectedDm, {fromUid:user.uid, status:"ringing"}).catch(()=>setToast("arama gönderilemedi"));
+    setJoinedVoice(selectedDm);
+    setCallPip(false);
+    setToast("arama yapılıyor…");
+  }
+
+  async function acceptDMCall(){
+    if(!user || !incomingCall) return;
+    const threadId = incomingCall.threadId;
+    setIncomingCall(null);
+    setSelectedDm(threadId);
+    setActiveView("dms");
+    await acceptDmCall(threadId, user.uid).catch(()=>{});
+    setJoinedVoice(threadId);
+    setCallPip(false);
+  }
+
+  async function rejectDMCall(){
+    if(!user || !incomingCall) return;
+    const threadId = incomingCall.threadId;
+    setIncomingCall(null);
+    await endDmCall(threadId, user.uid).catch(()=>{});
+    setToast("aramayı reddettin");
+  }
+
+  async function hangUpVoice(){
+    if(!user || !joinedVoice) return;
+    if(activeView==="dms"){
+      await endDmCall(joinedVoice, user.uid).catch(()=>{});
+    }
+    setJoinedVoice(null);
   }
 
   async function joinViaInvite(){
@@ -1425,7 +1503,7 @@ export default function Home(){
             <>
               <header className="chat-header">
                 <div className="channel-heading"><span className="hash"><span className="icon"><Icon name="dm"/></span></span><strong>{dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName || "MESAJLAR"}</strong><span className="topic">uçtan uca • RTDB</span></div>
-                <div className="header-actions"><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{if(!selectedDm)return;setJoinedVoice(joinedVoice===selectedDm?null:selectedDm);setCallPip(false);setToast(joinedVoice===selectedDm?"DM araması kapandı":"DM araması başlatıldı")}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid #fff":"1px solid var(--border)",background:joinedVoice===selectedDm?"#fff":"transparent",color:joinedVoice===selectedDm?"#000":"var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button></div>
+                <div className="header-actions"><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{void startDMCall();}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid #fff":"1px solid var(--border)",background:joinedVoice===selectedDm?"#fff":"transparent",color:joinedVoice===selectedDm?"#000":"var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button></div>
               </header>
               <div className="message-area" style={{padding:16}}>
                 {!selectedDm ? (
@@ -2449,6 +2527,29 @@ export default function Home(){
           </div>
         </div>
       )}
+      {incomingCall && !joinedVoice && (
+        <div className="call-overlay">
+          <div className="call-window">
+            <div className="call-head">
+              <div>
+                <div className="call-title">📞 Gelen Arama</div>
+                <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginTop:2}}>sizi arıyor…</div>
+              </div>
+            </div>
+            <div className="call-grid">
+              <div className="call-card incoming-pulse">
+                <div className="call-avatar">{initials(incomingCall.fromName || "??")}</div>
+                <div className="call-name">{incomingCall.fromName || "aranan kişi"}</div>
+                <div className="call-status"><span className="icon"><Icon name="phone" size={11}/></span> arama geliyor…</div>
+              </div>
+            </div>
+            <div className="call-controls">
+              <button className="danger" onClick={()=>{void rejectDMCall();}} title="Reddet"><span className="icon"><Icon name="phoneOff" size={16}/></span> REDDET</button>
+              <button className="accept" onClick={()=>{void acceptDMCall();}} title="Cevapla"><span className="icon"><Icon name="phone" size={16}/></span> CEVAPLA</button>
+            </div>
+          </div>
+        </div>
+      )}
       {toast && <div className="toast">{toast}</div>}
       {joinedVoice && (
         callPip ? (
@@ -2490,7 +2591,7 @@ export default function Home(){
               <div className="call-controls">
                 <button className={micMuted?"active":""} onClick={()=>setMicMuted(v=>!v)} title="Mikrofonu aç/kapat"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={16}/></span></button>
                 <button className={deafen?"active":""} onClick={()=>setDeafen(v=>!v)} title="Sağır modu (karşı tarafın sesini kapat)"><span className="icon"><Icon name="phoneOff" size={16}/></span></button>
-                <button className="danger" onClick={()=>setJoinedVoice(null)} title="Aramayı bitir"><span className="icon"><Icon name="phoneOff" size={16}/></span> AYRIL</button>
+                <button className="danger" onClick={()=>{void hangUpVoice();}} title="Aramayı bitir"><span className="icon"><Icon name="phoneOff" size={16}/></span> AYRIL</button>
               </div>
               <div className="call-audios">
                 {Object.entries(remoteStreams).map(([uid,stream])=>(<audio key={uid} autoPlay playsInline data-voice ref={el=>{if(el){el.srcObject=stream;el.volume=deafen?0:1;void el.play().catch(()=>{});}}}/>))}
