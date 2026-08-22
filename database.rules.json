@@ -199,8 +199,32 @@
     "friendRequests": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        "$fromUid": {
-          ".write": "auth != null && auth.uid === $fromUid"
+        "incoming": {
+          "$fromUid": {
+            ".write": "auth != null && (auth.uid === $fromUid || auth.uid === $uid)",
+            ".validate": "newData.hasChildren(['fromName', 'createdAt'])"
+          }
+        },
+        "outgoing": {
+          "$toUid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        },
+        "events": {
+          "$eventId": {
+            ".write": "auth != null",
+            ".validate": "newData.hasChildren(['type', 'createdAt'])"
+          },
+          ".read": "auth != null"
+        }
+      }
+    },
+    "serverInvites": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$inviteId": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['serverId', 'serverName', 'fromUid', 'fromName', 'createdAt'])"
         }
       }
     },

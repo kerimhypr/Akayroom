@@ -284,6 +284,9 @@ export default function Home(){
   const [dmPendingFile,setDmPendingFile]=useState<{file:File,preview?:string}|null>(null);
   const [dmAttachmentCache,setDmAttachmentCache]=useState<Record<string,{loading?:boolean,dataUrl?:string,error?:string}>>({});
   const [friends,setFriends]=useState<{uid:string, profile:UserProfile|null}[]>([]);
+  const [friendRequests,setFriendRequests]=useState<Record<string,{fromName?:string, createdAt:number}>>({});
+  const [sentRequests,setSentRequests]=useState<Record<string, boolean>>({});
+  const [incomingServerInvites,setIncomingServerInvites]=useState<Record<string,{serverId:string, serverName:string, fromUid:string, fromName?:string, createdAt:number}>>({});
   const [showMembers,setShowMembers]=useState(false);
   const [selectedProfileUid,setSelectedProfileUid]=useState<string|null>(null);
   const [selectedProfile,setSelectedProfile]=useState<UserProfile|null>(null);
@@ -296,6 +299,10 @@ export default function Home(){
   const [unread,setUnread]=useState<Record<string, number>>({});
   const [dmUnreadCount,setDmUnreadCount]=useState<Record<string, number>>({});
   const [toastFlash,setToastFlash]=useState<null|{id:string, text:string}>(null);
+  const [lastRead,setLastRead]=useState<Record<string, number>>(()=>{
+    if(typeof window!=="undefined"){ try{ return JSON.parse(localStorage.getItem("akayroom_lastRead")||"{}"); }catch{} }
+    return {};
+  });
 
   const messagesEndRef=useRef<HTMLDivElement>(null);
   const typingTimeout=useRef<NodeJS.Timeout | null>(null);
@@ -439,24 +446,37 @@ export default function Home(){
     });
   },[user, selectedServer]);
 
-  // Unread badge tracking: increment when a new message lands in a channel or DM we are NOT currently viewing.
+  // Unread badge tracking: count messages newer than lastRead[channel], skip counting when actively viewing.
+  // onChildAdded fires for existing children on attach; we use a per-key "primed" flag so only
+  // messages that arrive AFTER first snapshot are counted as incremental, and an initial get() computes
+  // the real backlog from lastRead.
   const activeChannelKey = activeView==="server" ? `${selectedServer}/${selectedChannel}` : null;
+  const lastReadRef = useRef(lastRead);
+  lastReadRef.current = lastRead;
   useEffect(()=>{
     if(!user || selectedServer==="demo") return;
     const unsubs: (()=>void)[] = [];
     channels.forEach(ch=>{
       if(ch.type==="voice") return;
       const key=`${selectedServer}/${ch.id}`;
+      let primed = false;
       const u = onChildAdded(ref(db,`messages/${selectedServer}/${ch.id}`),(snap)=>{
         const m = snap.val() as ChatMessage;
         if(!m || m.authorId===user.uid) return;
+        const ts = m.createdAt || 0;
+        const seen = lastReadRef.current[key] || 0;
         const isActive = activeChannelKey===key;
-        setUnread(prev=>{
-          const cur = prev[key]||0;
-          if(isActive) return {...prev, [key]:0};
-          return {...prev, [key]:cur+1};
-        });
-        if(!isActive && m.content){
+        if(!primed){
+          primed = true;
+          if(!isActive && ts > seen){
+            setUnread(prev=>({...prev, [key]: (prev[key]||0)+1}));
+          }
+          return;
+        }
+        if(isActive) return;
+        if(ts <= seen) return;
+        setUnread(prev=>({...prev, [key]: (prev[key]||0)+1}));
+        if(m.content){
           setToastFlash({id:`${selectedServer}-${ch.id}-${snap.key}`, text: `${m.authorName||"biri"}: ${m.content.slice(0,80)}`});
         }
       });
@@ -465,33 +485,48 @@ export default function Home(){
     return ()=>unsubs.forEach(u=>{try{u();}catch{}});
   },[user, selectedServer, channels, activeChannelKey]);
 
-  // Reset unread channel count when we open a channel
+  // When we open a channel, mark it read (persist lastRead)
   useEffect(()=>{
-    if(activeChannelKey) setUnread(prev=>{ const n={...prev}; delete n[activeChannelKey]; return n; });
+    if(!activeChannelKey) return;
+    setLastRead(prev=>({...prev, [activeChannelKey]: Date.now()}));
+    setUnread(prev=>{ const n={...prev}; delete n[activeChannelKey]; return n; });
   },[activeChannelKey]);
 
-  // DM unread: listen to all DM threads, count unseen messages
+  // DM unread: count messages newer than lastRead[dm-{threadId}]
   useEffect(()=>{
     if(!user || dmThreads.length===0) return;
-    const unsubs = dmThreads.map(th=> onChildAdded(ref(db,`dmMessages/${th.id}`),(snap)=>{
-      const m = snap.val() as {authorId?:string, content?:string};
-      if(!m || !m.authorId || m.authorId===user.uid) return;
-      const isActive = activeView==="dms" && selectedDm===th.id;
-      setDmUnreadCount(prev=>{
-        const cur = prev[th.id]||0;
-        if(isActive) return {...prev, [th.id]:0};
-        return {...prev, [th.id]:cur+1};
+    const unsubs = dmThreads.map(th=>{
+      let primed = false;
+      return onChildAdded(ref(db,`dmMessages/${th.id}`),(snap)=>{
+        const m = snap.val() as {authorId?:string, content?:string, createdAt?:number};
+        if(!m || !m.authorId || m.authorId===user.uid) return;
+        const ts = m.createdAt || 0;
+        const seen = lastReadRef.current[`dm-${th.id}`] || 0;
+        const isActive = activeView==="dms" && selectedDm===th.id;
+        if(!primed){
+          primed = true;
+          if(!isActive && ts > seen){
+            setDmUnreadCount(prev=>({...prev, [th.id]: (prev[th.id]||0)+1}));
+          }
+          return;
+        }
+        if(isActive) return;
+        if(ts <= seen) return;
+        setDmUnreadCount(prev=>({...prev, [th.id]: (prev[th.id]||0)+1}));
+        if(m.content){
+          setToastFlash({id:`dm-${th.id}-${snap.key}`, text:`${th.profile?.displayName||th.profile?.username||"biri"}: ${m.content.slice(0,80)}`});
+        }
       });
-      if(!isActive && m.content){
-        setToastFlash({id:`dm-${th.id}-${snap.key}`, text:`${th.profile?.displayName||th.profile?.username||"biri"}: ${m.content.slice(0,80)}`});
-      }
-    }));
+    });
     return ()=>unsubs.forEach(u=>{try{u();}catch{}});
   },[user, dmThreads, activeView, selectedDm]);
 
-  // Reset DM unread when opening a DM
+  // Mark DM read when opening it
   useEffect(()=>{
-    if(activeView==="dms" && selectedDm) setDmUnreadCount(prev=>{ const n={...prev}; delete n[selectedDm]; return n; });
+    if(activeView==="dms" && selectedDm){
+      setLastRead(prev=>({...prev, [`dm-${selectedDm}`]: Date.now()}));
+      setDmUnreadCount(prev=>{ const n={...prev}; delete n[selectedDm]; return n; });
+    }
   },[activeView, selectedDm]);
 
 
@@ -545,6 +580,45 @@ export default function Home(){
         next.push({uid:fid, profile: psnap.exists()? psnap.val(): null});
       }
       setFriends(next);
+    });
+  },[user]);
+
+  // Listen for incoming friend requests
+  useEffect(()=>{
+    if(!user) return;
+    return onValue(ref(db,`friendRequests/${user.uid}/incoming`),(snap)=>{
+      if(!snap.exists()){ setFriendRequests({}); return; }
+      setFriendRequests(snap.val() as Record<string,{fromName?:string, createdAt:number}>);
+    });
+  },[user]);
+
+  // Listen for refused/accepted events sent to me (3s toast)
+  useEffect(()=>{
+    if(!user) return;
+    return onChildAdded(ref(db,`friendRequests/${user.uid}/events`),(snap)=>{
+      const ev = snap.val() as {type:string, fromName?:string};
+      if(!ev) return;
+      const text = ev.type==="accepted" ? `${ev.fromName||"biri"} arkadaşlık isteğini kabul etti ✓` : `${ev.fromName||"biri"} arkadaşlık isteğini reddetti ✕`;
+      setToastFlash({id:`ev-${snap.key}`, text});
+      void remove(ref(db,`friendRequests/${user.uid}/events/${snap.key}`)).catch(()=>{});
+    });
+  },[user]);
+
+  // Track my outgoing sent requests
+  useEffect(()=>{
+    if(!user) return;
+    return onValue(ref(db,`friendRequests/${user.uid}/outgoing`),(snap)=>{
+      if(!snap.exists()){ setSentRequests({}); return; }
+      setSentRequests(snap.val() as Record<string, boolean>);
+    });
+  },[user]);
+
+  // Listen for incoming server invites
+  useEffect(()=>{
+    if(!user) return;
+    return onValue(ref(db,`serverInvites/${user.uid}`),(snap)=>{
+      if(!snap.exists()){ setIncomingServerInvites({}); return; }
+      setIncomingServerInvites(snap.val() as Record<string,{serverId:string, serverName:string, fromUid:string, fromName?:string, createdAt:number}>);
     });
   },[user]);
 
@@ -720,6 +794,11 @@ export default function Home(){
   useEffect(()=>{
     if(typeof window!=="undefined"){ try{ localStorage.setItem("akayroom_callPipPos", JSON.stringify(callPipPos)); }catch{} }
   },[callPipPos]);
+
+  // persist lastRead across sessions
+  useEffect(()=>{
+    if(typeof window!=="undefined"){ try{ localStorage.setItem("akayroom_lastRead", JSON.stringify(lastRead)); }catch{} }
+  },[lastRead]);
 
   // auto-dismiss flash toast after 3s
   useEffect(()=>{
@@ -1046,6 +1125,90 @@ export default function Home(){
 
   function openProfile(uid:string){ setSelectedProfileUid(uid); }
 
+  // ==== Friend request flow ====
+  async function sendFriendRequest(targetUid: string, targetName: string){
+    if(!user) return;
+    if(targetUid===user.uid){ setToast("kendine istek atamazsın"); return; }
+    if(friends.some(f=>f.uid===targetUid)){ setToast("zaten arkadaşsınız"); return; }
+    const myName = profile?.displayName || profile?.username || username || "biri";
+    try{
+      await set(ref(db,`friendRequests/${targetUid}/incoming/${user.uid}`), {fromName: myName, createdAt: Date.now()});
+      await set(ref(db,`friendRequests/${user.uid}/outgoing/${targetUid}`), true);
+      setToast(`istek gönderildi → ${targetName}`);
+    }catch(e){ setToast("istek gönderilemedi"); }
+  }
+
+  async function acceptFriendRequest(fromUid: string){
+    if(!user) return;
+    try{
+      await set(ref(db,`friends/${user.uid}/${fromUid}`), true);
+      await set(ref(db,`friends/${fromUid}/${user.uid}`), true);
+      await remove(ref(db,`friendRequests/${user.uid}/incoming/${fromUid}`));
+      await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"accepted", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
+      setToast("arkadaş oldun ✓");
+    }catch{ setToast("işlem başarısız"); }
+  }
+
+  async function rejectFriendRequest(fromUid: string, fromName?: string){
+    if(!user) return;
+    try{
+      await remove(ref(db,`friendRequests/${user.uid}/incoming/${fromUid}`));
+      await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"rejected", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
+      setToast("istek reddedildi");
+    }catch{ setToast("işlem başarısız"); }
+  }
+
+  async function cancelFriendRequest(toUid: string){
+    if(!user) return;
+    try{
+      await remove(ref(db,`friendRequests/${user.uid}/outgoing/${toUid}`));
+      await remove(ref(db,`friendRequests/${toUid}/incoming/${user.uid}`));
+      setToast("istek geri çekildi");
+    }catch{ setToast("işlem başarısız"); }
+  }
+
+  async function removeFriend(friendUid: string){
+    if(!user) return;
+    if(!confirm("arkadaşlıktan çıkarılsın mı? karşı taraftan da silinecek.")) return;
+    try{
+      await remove(ref(db,`friends/${user.uid}/${friendUid}`));
+      await remove(ref(db,`friends/${friendUid}/${user.uid}`));
+      setFriends(prev=> prev.filter(f=>f.uid!==friendUid));
+      setToast("arkadaşlıktan çıkarıldı");
+    }catch{ setToast("işlem başarısız"); }
+  }
+
+  async function inviteFriendToServer(friendUid: string){
+    if(!user || selectedServer==="demo"){ setToast("önce bir sunucu seç"); return; }
+    try{
+      await set(ref(db,`serverInvites/${friendUid}/${Date.now()}`), {
+        serverId: selectedServer,
+        serverName: selectedServerData?.name || "bir sunucu",
+        fromUid: user.uid,
+        fromName: profile?.displayName || username || "biri",
+        createdAt: Date.now(),
+      });
+      setToast("sunucu daveti gönderildi");
+    }catch{ setToast("davet gönderilemedi"); }
+  }
+
+  async function acceptServerInvite(inviteId: string, inv: {serverId:string}){
+    if(!user) return;
+    try{
+      const {serverId} = inv;
+      await set(ref(db,`serverMembers/${serverId}/${user.uid}`), {role:"member", joinedAt: serverTimestamp()});
+      await remove(ref(db,`serverInvites/${user.uid}/${inviteId}`));
+      setSelectedServer(serverId);
+      setActiveView("server");
+      setToast("sunucuya katıldın ✓");
+    }catch(e){ setToast("katılınamadı"); }
+  }
+
+  async function declineServerInvite(inviteId: string){
+    if(!user) return;
+    await remove(ref(db,`serverInvites/${user.uid}/${inviteId}`)).catch(()=>{});
+  }
+
   async function handleAvatarFile(file: File, forProfile=true){
     if(!user || !file) return;
     if(file.size > 4*1024*1024){ setToast("fotoğraf 4MB'dan küçük olmalı"); return; }
@@ -1277,7 +1440,7 @@ export default function Home(){
         <div className="brand-mark">GG</div>
         <div className="rail-divider"/>
         <button className={`server-icon dm ${activeView==="servers"?"active":""}`} onClick={()=>setActiveView("servers")} title="Sunucular"><span className="icon"><Icon name="grid"/></span></button>
-        <button className={`server-icon dm ${activeView==="friends"?"active":""}`} onClick={()=>setActiveView("friends")} title="Arkadaşlar"><span className="icon"><Icon name="users"/></span></button>
+        <button className={`server-icon dm ${activeView==="friends"?"active":""}`} onClick={()=>setActiveView("friends")} title="Arkadaşlar"><span className="icon"><Icon name="users"/></span>{(Object.keys(friendRequests).length > 0 || Object.keys(incomingServerInvites).length > 0) && <span className="unread-badge rail-badge">{Object.keys(friendRequests).length + Object.keys(incomingServerInvites).length}</span>}</button>
         <div className="rail-divider" style={{marginTop:8}}/>
         <div style={{flex:1}}/>
         <button onClick={()=>setActiveView("profile")} style={{width:44, height:44, border:"1px solid var(--border)", background: (activeView as any)==="profile" ? "#fff" : "#111", color: (activeView as any)==="profile" ? "#000" : "#fff", display:"grid", placeItems:"center", overflow:"visible", flex:"0 0 auto", position:"relative", borderRadius:"50%"}} title="Profil">
@@ -1432,35 +1595,66 @@ export default function Home(){
                   </div>
                 ))
               ) : friendsTab==="inbox" ? (
-                filteredMessages.length===0 ? (
-                  <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", padding:12, border:"1px dashed var(--border)", textAlign:"center"}}>
-                    bahsedilme yok — birisi seni @ ile etiketlediğinde burada görünür
-                  </div>
-                ) : filteredMessages.slice(-4).reverse().map(m=>(
-                  <div key={m.id} style={{border:"1px solid var(--border)", padding:10, marginBottom:8, background:"var(--surface-2)"}}>
-                    <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:4}}>#{channels.find(c=>c.id===m.channelId)?.name} • {fmtTime(m.createdAt)}</div>
-                    <div style={{fontSize:12}}><strong>{m.authorName}</strong>: {m.content.slice(0,80)}</div>
-                  </div>
-                ))
+                <>
+                  <div className="category-label" style={{display:"flex", alignItems:"center", gap:6}}>ARKADAŞLIK İSTEKLERİ {Object.keys(friendRequests).length>0 && <span className="unread-badge">{Object.keys(friendRequests).length}</span>}</div>
+                  {Object.keys(friendRequests).length===0 ? (
+                    <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", padding:12, border:"1px dashed var(--border)", textAlign:"center", marginBottom:14}}>
+                      bekleyen arkadaşlık isteği yok
+                    </div>
+                  ) : Object.entries(friendRequests).map(([fid, req])=>(
+                    <div key={fid} style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, marginBottom:8, display:"flex", alignItems:"center", gap:8}}>
+                      <button className="avatar" onClick={()=>openProfile(fid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111"}}>{initials(req.fromName || "??")}</button>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontSize:13, fontWeight:600}}>{req.fromName || "kullanıcı"}</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>{fmtTime(req.createdAt)}</div>
+                      </div>
+                      <button className="btn btn-primary" onClick={()=>void acceptFriendRequest(fid)}>KABUL</button>
+                      <button className="btn" onClick={()=>void rejectFriendRequest(fid, req.fromName)}>REDDET</button>
+                    </div>
+                  ))}
+                  <div className="category-label" style={{display:"flex", alignItems:"center", gap:6, marginTop:6}}>SUNUCU DAVETLERİ {Object.keys(incomingServerInvites).length>0 && <span className="unread-badge">{Object.keys(incomingServerInvites).length}</span>}</div>
+                  {Object.entries(incomingServerInvites).map(([invId, inv])=>(
+                    <div key={invId} style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, marginBottom:8, display:"flex", alignItems:"center", gap:8}}>
+                      <div style={{width:28, height:28, display:"grid", placeItems:"center", border:"1px solid var(--border)", background:"#000", color:"#fff"}}><span className="icon"><Icon name="grid" size={13}/></span></div>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontSize:13, fontWeight:600}}>{inv.serverName}</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>{inv.fromName || "biri"} seni davet etti</div>
+                      </div>
+                      <button className="btn btn-primary" onClick={()=>void acceptServerInvite(invId, inv)}>KATIL</button>
+                      <button className="btn" onClick={()=>void declineServerInvite(invId)}>REDDET</button>
+                    </div>
+                  ))}
+                  {Object.keys(incomingServerInvites).length===0 && (
+                    <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", padding:12, border:"1px dashed var(--border)", textAlign:"center"}}>sunucu daveti yok</div>
+                  )}
+                  <div className="category-label" style={{margin:"18px 0 8px"}}>BAHSEDİLMELER</div>
+                  {filteredMessages.length===0 ? (
+                    <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", padding:12, border:"1px dashed var(--border)", textAlign:"center"}}>
+                      bahsedilme yok — birisi seni @ ile etiketlediğinde burada görünür
+                    </div>
+                  ) : filteredMessages.slice(-4).reverse().map(m=>(
+                    <div key={m.id} style={{border:"1px solid var(--border)", padding:10, marginBottom:8, background:"var(--surface-2)"}}>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:4}}>#{channels.find(c=>c.id===m.channelId)?.name} • {fmtTime(m.createdAt)}</div>
+                      <div style={{fontSize:12}}><strong>{m.authorName}</strong>: {m.content.slice(0,80)}</div>
+                    </div>
+                  ))}
+                </>
               ) : (
                 <>
-                  <div className="category-label" style={{marginBottom:8}}>ARKADAŞ EKLE</div>
-                  <div style={{display:"flex", gap:6}}>
-                    <input value={friendName} onChange={e=>setFriendName(e.target.value)} placeholder="kullanici_adi" style={{flex:1, background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
-                    <button className="btn btn-primary" onClick={async()=>{
-                      const clean = friendName.trim().toLowerCase();
-                      if(!clean) return;
-                      const snap = await get(ref(db,`usernameIndex/${clean}`));
-                      if(!snap.exists()){ setToast("bulunamadı"); return; }
-                      const fid = snap.val() as string;
-                      if(fid===user.uid){ setToast("kendini ekleyemezsin"); return; }
-                      await set(ref(db,`friends/${user.uid}/${fid}`), true);
-                      await set(ref(db,`friends/${fid}/${user.uid}`), true);
-                      const psnap = await get(ref(db,`users/${fid}/public`));
-                      setFriends(prev=> [...prev, {uid: fid, profile: psnap.exists()? psnap.val(): null}]);
-                      setFriendName(""); setToast(`eklendi: ${clean}`);
-                    }}>EKLE</button>
-                  </div>
+                    <div className="category-label" style={{marginBottom:8}}>ARKADAŞ EKLE</div>
+                    <div style={{display:"flex", gap:6}}>
+                      <input value={friendName} onChange={e=>setFriendName(e.target.value)} placeholder="kullanici_adi" style={{flex:1, background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                      <button className="btn btn-primary" onClick={async()=>{
+                        const clean = friendName.trim().toLowerCase();
+                        if(!clean) return;
+                        const snap = await get(ref(db,`usernameIndex/${clean}`));
+                        if(!snap.exists()){ setToast("bulunamadı"); return; }
+                        const fid = snap.val() as string;
+                        const psnap = await get(ref(db,`users/${fid}/public`));
+                        await sendFriendRequest(fid, (psnap.exists()? (psnap.val() as any).displayName : null) || clean);
+                        setFriendName("");
+                      }}>İSTEK AT</button>
+                    </div>
                   <div className="category-label" style={{margin:"14px 0 8px"}}>ARKADAŞLARIM</div>
                   {friends.length===0 ? (
                     <div style={{border:"1px dashed var(--border)", padding:16, textAlign:"center", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>
@@ -1474,6 +1668,8 @@ export default function Home(){
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>@{f.profile?.username}</div>
                       </div>
                       <button className="btn" onClick={()=>startDM(f.uid)}>DM</button>
+                      <button className="btn" onClick={()=>void inviteFriendToServer(f.uid)} title="Seçili sunucuya davet et">DAVET</button>
+                      <button className="btn" style={{color:"#ff4444"}} onClick={()=>void removeFriend(f.uid)} title="Arkadaşlıktan çıkar">ÇIKAR</button>
                     </div>
                   ))}
                 </>
@@ -2518,7 +2714,13 @@ export default function Home(){
                   </div>
                   <div style={{display:"flex", gap:6, justifyContent:"flex-end", marginTop:12}}>
                     {selectedProfileUid!==user.uid && <button className="btn btn-primary" onClick={()=>{startDM(selectedProfileUid!); setSelectedProfileUid(null);}}>DM GÖNDER</button>}
-                    {selectedProfileUid!==user.uid && <button className="btn" onClick={async()=>{const clean=selectedProfile.username.toLowerCase(); const snap=await get(ref(db,`friends/${user.uid}/${selectedProfileUid}`)); if(snap.exists()){ setToast("zaten arkadaş"); return; } await set(ref(db,`friends/${user.uid}/${selectedProfileUid}`), true); await set(ref(db,`friends/${selectedProfileUid}/${user.uid}`), true); setToast("eklendi");}}>ARKADAŞ EKLE</button>}
+                    {selectedProfileUid!==user.uid && (friends.some(f=>f.uid===selectedProfileUid) ? (
+  <button className="btn" onClick={()=>void removeFriend(selectedProfileUid)} style={{color:"#ff4444"}}>ARKADAŞLIĞI BİTİR</button>
+) : sentRequests[selectedProfileUid] ? (
+  <button className="btn" onClick={()=>void cancelFriendRequest(selectedProfileUid)}>İSTEK GÖNDERİLDİ — GERİ ÇEK</button>
+) : (
+  <button className="btn" onClick={()=>void sendFriendRequest(selectedProfileUid, selectedProfile.username)}>ARKADAŞLIK İSTEĞİ GÖNDER</button>
+))}
                     <button className="btn" onClick={()=>setSelectedProfileUid(null)}>KAPAT</button>
                   </div>
                 </>
