@@ -1,7 +1,11 @@
-import { push, ref, serverTimestamp, set } from "firebase/database";
+import { equalTo, get, limitToFirst, orderByChild, push, query, ref, serverTimestamp, set } from "firebase/database";
 import { db } from "./firebase";
 
 export async function createStarterServer(uid: string) {
+  // Registration can be submitted more than once while the first request is settling.
+  const existing = await get(query(ref(db, "servers"), orderByChild("ownerId"), equalTo(uid), limitToFirst(1)));
+  if (existing.exists()) return Object.keys(existing.val())[0];
+
   const serverRef = push(ref(db, "servers"));
   const generalRef = push(ref(db, `channels/${serverRef.key}`));
   const loungeRef = push(ref(db, `channels/${serverRef.key}`));

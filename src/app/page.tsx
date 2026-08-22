@@ -194,6 +194,8 @@ export default function Home(){
   const [toast,setToast]=useState("");
   const [showCreateServer,setShowCreateServer]=useState(false);
   const [newServerName,setNewServerName]=useState("");
+  const [creatingServer,setCreatingServer]=useState(false);
+  const [joiningInvite,setJoiningInvite]=useState(false);
   const [showCreateChannel,setShowCreateChannel]=useState(false);
   const [newChannelName,setNewChannelName]=useState("");
   const [newChannelType,setNewChannelType]=useState<Channel["type"]>("text");
@@ -653,18 +655,26 @@ export default function Home(){
   }
 
   async function createServer(){
-    if(!user || !newServerName.trim()) return;
-    const sRef=push(ref(db,"servers"));
-    if(!sRef.key) return;
-    const now=serverTimestamp();
-    await set(sRef,{name:newServerName.trim(), ownerId:user.uid, createdAt: now});
-    await set(ref(db,`serverMembers/${sRef.key}/${user.uid}`),{role:"owner",joinedAt:now});
-    const catId=push(ref(db,`categories/${sRef.key}`)).key!;
-    await set(ref(db,`categories/${sRef.key}/${catId}`),{name:"SOHBET", position:0});
-    const ch1=push(ref(db,`channels/${sRef.key}`)); await set(ch1,{name:"genel", type:"text", position:0, categoryId:catId, createdAt:now});
-    const ch2=push(ref(db,`channels/${sRef.key}`)); await set(ch2,{name:"sesli-oda", type:"voice", position:1, categoryId:null, createdAt:now});
-    setSelectedServer(sRef.key); setSelectedChannel(ch1.key!);
-    setShowCreateServer(false); setNewServerName(""); setToast(`sunucu: ${newServerName}`);
+    if(!user || !newServerName.trim() || creatingServer) return;
+    setCreatingServer(true);
+    const name=newServerName.trim();
+    try{
+      const sRef=push(ref(db,"servers"));
+      if(!sRef.key) return;
+      const now=serverTimestamp();
+      await set(sRef,{name, ownerId:user.uid, createdAt: now});
+      await set(ref(db,`serverMembers/${sRef.key}/${user.uid}`),{role:"owner",joinedAt:now});
+      const catId=push(ref(db,`categories/${sRef.key}`)).key!;
+      await set(ref(db,`categories/${sRef.key}/${catId}`),{name:"SOHBET", position:0});
+      const ch1=push(ref(db,`channels/${sRef.key}`)); await set(ch1,{name:"genel", type:"text", position:0, categoryId:catId, createdAt:now});
+      const ch2=push(ref(db,`channels/${sRef.key}`)); await set(ch2,{name:"sesli-oda", type:"voice", position:1, categoryId:null, createdAt:now});
+      setSelectedServer(sRef.key); setSelectedChannel(ch1.key!);
+      setShowCreateServer(false); setNewServerName(""); setToast(`sunucu: ${name}`);
+    }catch(err){
+      setToast(err instanceof Error ? err.message : "sunucu oluşturulamadı");
+    }finally{
+      setCreatingServer(false);
+    }
   }
 
   async function createChannel(){
@@ -703,16 +713,23 @@ export default function Home(){
   }
 
   async function joinViaInvite(){
-    if(!joinCode.trim() || !user) return;
+    if(!joinCode.trim() || !user || joiningInvite) return;
+    setJoiningInvite(true);
     const code=joinCode.trim();
-    const snap=await get(ref(db,`invites/${code}`));
-    if(!snap.exists()){ setToast("davet bulunamadı"); return; }
-    const inv=snap.val() as any;
-    await set(ref(db,`serverMembers/${inv.serverId}/${user.uid}`),{role:"member",joinedAt: serverTimestamp()});
-    setSelectedServer(inv.serverId);
-    setActiveView("server");
-    setToast("katıldın");
-    setJoinCode("");
+    try{
+      const snap=await get(ref(db,`invites/${code}`));
+      if(!snap.exists()){ setToast("davet bulunamadı"); return; }
+      const inv=snap.val() as any;
+      await set(ref(db,`serverMembers/${inv.serverId}/${user.uid}`),{role:"member",joinedAt: serverTimestamp()});
+      setSelectedServer(inv.serverId);
+      setActiveView("server");
+      setToast("katıldın");
+      setJoinCode("");
+    }catch(err){
+      setToast(err instanceof Error ? err.message : "davete katılınamadı");
+    }finally{
+      setJoiningInvite(false);
+    }
   }
 
   function openProfile(uid:string){ setSelectedProfileUid(uid); }
@@ -930,7 +947,7 @@ export default function Home(){
                 <button className="btn btn-primary" onClick={()=>setShowCreateServer(true)}>SUNUCU OLUŞTUR</button>
                 <div style={{display:"flex", gap:6}}>
                   <input value={joinCode} onChange={e=>setJoinCode(e.target.value)} placeholder="davet kodu" style={{flex:1, background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:11}} />
-                  <button className="btn" onClick={joinViaInvite}>KATIL</button>
+                  <button className="btn" onClick={joinViaInvite} disabled={joiningInvite}>{joiningInvite ? "..." : "KATIL"}</button>
                 </div>
               </div>
             ) : (
@@ -1537,13 +1554,13 @@ export default function Home(){
                 <label>DAVET KODUYLA KATIL</label>
                 <div style={{display:"flex", gap:6}}>
                   <input value={joinCode} onChange={e=>setJoinCode(e.target.value)} placeholder="ABC123" style={{flex:1}} />
-                  <button className="btn" onClick={joinViaInvite}>KATIL</button>
+                   <button className="btn" onClick={joinViaInvite} disabled={joiningInvite}>{joiningInvite ? "..." : "KATIL"}</button>
                 </div>
               </div>
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={()=>setShowCreateServer(false)}>İPTAL</button>
-              <button className="btn btn-primary" onClick={createServer} disabled={!newServerName.trim()}>OLUŞTUR</button>
+              <button className="btn btn-primary" onClick={createServer} disabled={!newServerName.trim() || creatingServer}>{creatingServer ? "OLUŞTURULUYOR..." : "OLUŞTUR"}</button>
             </div>
           </div>
         </div>
