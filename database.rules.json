@@ -42,8 +42,8 @@
       }
     },
     "servers": {
+      ".read": "auth != null",
       "$serverId": {
-        ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
         ".write": "auth != null && (!data.exists() || data.child('ownerId').val() === auth.uid)",
         ".validate": "newData.hasChildren(['name', 'ownerId', 'createdAt'])"
       }
@@ -59,8 +59,8 @@
     },
     "categories": {
       "$serverId": {
+        ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
         "$categoryId": {
-          ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
           ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
           ".validate": "newData.hasChildren(['name', 'position'])"
         }
@@ -68,8 +68,8 @@
     },
     "channels": {
       "$serverId": {
+        ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
         "$channelId": {
-          ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
           ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
           ".validate": "newData.hasChildren(['name', 'type', 'position'])"
         }
@@ -104,9 +104,9 @@
     "reactions": {
       "$serverId": {
         "$channelId": {
+          ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
           "$messageId": {
             "$emoji": {
-              ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
               ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()"
             }
           }
@@ -116,8 +116,8 @@
     "typing": {
       "$serverId": {
         "$channelId": {
+          ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
           "$uid": {
-            ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "newData.hasChildren(['username', 'timestamp'])"
           }
@@ -154,9 +154,10 @@
     },
     "threadMessages": {
       "$threadId": {
+        ".read": "auth != null",
         "$messageId": {
-          ".read": "auth != null",
-          ".write": "auth != null && newData.child('authorId').val() === auth.uid"
+          ".write": "auth != null && !data.exists() && newData.child('authorId').val() === auth.uid",
+          ".validate": "newData.hasChildren(['authorId', 'content', 'createdAt'])"
         }
       }
     },

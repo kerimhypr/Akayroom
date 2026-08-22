@@ -11,6 +11,7 @@ import {
 import {
   get,
   limitToLast,
+  onDisconnect,
   onValue,
   orderByChild,
   push,
@@ -166,6 +167,7 @@ export default function Home(){
   const [authError,setAuthError]=useState("");
 
   const [servers,setServers]=useState<Server[]>(fallbackServers);
+  const [myServerIds,setMyServerIds]=useState<Record<string, boolean>>({});
   const [categories,setCategories]=useState<Category[]>(fallbackCats);
   const [channels,setChannels]=useState<Channel[]>(fallbackChannels);
   const [selectedServer,setSelectedServer]=useState("demo");
@@ -268,19 +270,36 @@ export default function Home(){
       if(snap.exists()) setProfile(snap.val());
       const presRef=ref(db,`users/${u.uid}/presence`);
       set(presRef,{status:"online",lastChanged:Date.now(),connections:{[Date.now()]:true}}).catch(()=>{});
+      onDisconnect(ref(db,`users/${u.uid}/presence/status`)).set("offline").catch(()=>{});
+      onDisconnect(ref(db,`users/${u.uid}/presence/lastChanged`)).set(Date.now()).catch(()=>{});
     });
   },[]);
 
   useEffect(()=>{
     if(!user) return;
     const q=query(ref(db,"servers"),orderByChild("createdAt"));
-    return onValue(q,(snap)=>{
-      if(!snap.exists()) return;
-      const next=Object.entries(snap.val()).map(([id,v])=>({id, ...(v as Omit<Server,"id">)}));
-      setServers(next);
-      if(next[0] && selectedServer==="demo") setSelectedServer(next[0].id);
-    });
-  },[user,selectedServer]);
+    return onValue(q, async (snap)=>{
+      const next = snap.exists()
+        ? Object.entries(snap.val()).map(([id,v])=>({id, ...(v as Omit<Server,"id">)}))
+        : [];
+      setServers(next.length ? next : fallbackServers);
+      const mine: Record<string, boolean> = {};
+      await Promise.all(next.map(async s=>{
+        try{
+          const m=await get(ref(db,`serverMembers/${s.id}/${user.uid}`));
+          if(m.exists()) mine[s.id]=true;
+        }catch{ /* not a member */ }
+      }));
+      setMyServerIds(mine);
+      setSelectedServer(prev=>{
+        if(prev==="demo" || !mine[prev]){
+          const first=Object.keys(mine)[0];
+          return first ?? "demo";
+        }
+        return prev;
+      });
+    }, (err)=>{ console.warn("servers load failed:", (err as any).code ?? err.message); });
+  },[user]);
 
   useEffect(()=>{
     if(!user || selectedServer==="demo") { setCategories(fallbackCats); return; }
@@ -691,6 +710,7 @@ export default function Home(){
     const inv=snap.val() as any;
     await set(ref(db,`serverMembers/${inv.serverId}/${user.uid}`),{role:"member",joinedAt: serverTimestamp()});
     setSelectedServer(inv.serverId);
+    setActiveView("server");
     setToast("katıldın");
     setJoinCode("");
   }
@@ -774,19 +794,44 @@ export default function Home(){
     setInviteCode(code); setToast(`davet: ${code}`);
   }
 
-  function toggleReaction(msgId:string, emoji:string){
-    setReactionMap(prev=>{
-      const cur=prev[msgId]||{};
-      const existed=cur[emoji];
-      const next={...cur};
-      if(existed?.me){ if(existed.count<=1) delete next[emoji]; else next[emoji]={count:existed.count-1, me:false}; }
-      else next[emoji]={count:(existed?.count||0)+1, me:true};
-      return {...prev, [msgId]:next};
+  // reactions: live sync from DB (fixes disappearing reactions)
+  useEffect(()=>{
+    if(!user || selectedServer==="demo" || !selectedChannel){ setReactionMap({}); return; }
+    return onValue(ref(db,`reactions/${selectedServer}/${selectedChannel}`),(snap)=>{
+      const out: Record<string, Record<string,{count:number,me:boolean}>> = {};
+      if(snap.exists()){
+        const v=snap.val() as Record<string, Record<string, Record<string, boolean>>>;
+        Object.entries(v).forEach(([mid,emojis])=>{
+          Object.entries(emojis||{}).forEach(([emoji,users])=>{
+            const ids=Object.keys(users||{});
+            if(ids.length===0) return;
+            out[mid]=out[mid]||{};
+            out[mid][emoji]={count:ids.length, me: !!users[user!.uid]};
+          });
+        });
+      }
+      setReactionMap(out);
     });
-    if(user && selectedServer!=="demo"){
-      const rRef=ref(db,`reactions/${selectedServer}/${selectedChannel}/${msgId}/${emoji}/${user.uid}`);
-      get(rRef).then(s=>{ if(s.exists()) remove(rRef); else set(rRef,true); }).catch(()=>{});
-    }
+  },[user,selectedServer,selectedChannel]);
+
+  // threads: persist + live sync (fixes disappearing thread replies)
+  useEffect(()=>{
+    if(!showThread || !threadParent) return;
+    return onValue(ref(db,`threadMessages/${threadParent.id}`),(snap)=>{
+      const arr:ChatMessage[]=[];
+      snap.forEach(c=>{
+        const v=c.val() as any;
+        arr.push({id:c.key??"", serverId:threadParent.serverId, channelId:threadParent.channelId, authorId:v.authorId, authorName:v.authorName, content:v.content, createdAt:v.createdAt});
+      });
+      arr.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+      setThreadMessages(prev=>({...prev,[threadParent.id]:arr}));
+    });
+  },[showThread,threadParent]);
+
+  function toggleReaction(msgId:string, emoji:string){
+    if(!user || selectedServer==="demo") { setToast("demo sunucuda tepki yok"); return; }
+    const rRef=ref(db,`reactions/${selectedServer}/${selectedChannel}/${msgId}/${emoji}/${user.uid}`);
+    get(rRef).then(s=>{ if(s.exists()) remove(rRef); else set(rRef,true); }).catch(()=>{});
   }
 
   async function deleteMessage(msg:ChatMessage){
@@ -805,13 +850,12 @@ export default function Home(){
 
   function openThread(msg:ChatMessage){
     setThreadParent(msg); setShowThread(true);
-    if(!threadMessages[msg.id]) setThreadMessages(prev=>({...prev, [msg.id]:[]}));
   }
 
   function sendThread(){
     if(!threadParent || !threadDraft.trim() || !user) return;
-    const t={id: Math.random().toString(36).slice(2,9), serverId: threadParent.serverId, channelId: threadParent.channelId, authorId:user.uid, authorName: profile?.displayName ?? username, content: threadDraft.trim(), createdAt: Date.now() } as ChatMessage;
-    setThreadMessages(prev=>({...prev, [threadParent.id]: [...(prev[threadParent.id]||[]), t]}));
+    const r=push(ref(db,`threadMessages/${threadParent.id}`));
+    void set(r,{authorId:user.uid, authorName: profile?.displayName ?? profile?.username ?? username ?? "anon", content: threadDraft.trim(), createdAt: Date.now()});
     setThreadDraft("");
   }
 
@@ -847,7 +891,7 @@ export default function Home(){
       <aside className="server-rail">
         <div className="brand-mark">GG</div>
         <div className="rail-divider"/>
-        {servers.filter(s=>s.id!=="demo").map(s=>(
+        {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).map(s=>(
           <button key={s.id} className={`server-icon ${selectedServer===s.id && activeView==="server" ? "active":""}`} onClick={()=>{setSelectedServer(s.id); setActiveView("server");}} title={s.name}>
             {initials(s.name)}
           </button>
@@ -1143,7 +1187,7 @@ export default function Home(){
                       </div>
                       <div style={{marginTop:10, display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8}}>
                         <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)", letterSpacing:".06em"}}>KATILIM</div><div style={{fontWeight:700, fontSize:11, marginTop:4}}>{profile?.createdAt ? fmtDate(profile.createdAt) : "—"}</div></div>
-                        <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>SUNUCU</div><div style={{fontWeight:800, fontSize:14}}>{servers.filter(s=>s.id!=="demo").length}</div></div>
+                        <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>SUNUCU</div><div style={{fontWeight:800, fontSize:14}}>{Object.keys(myServerIds).length}</div></div>
                         <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>ARKADAŞ</div><div style={{fontWeight:800, fontSize:14}}>{friends.length}</div></div>
                       </div>
                       <div style={{marginTop:10, border:"1px solid var(--border)", background:"#000", padding:10, display:"flex", gap:8, alignItems:"center"}}>
@@ -1813,7 +1857,16 @@ export default function Home(){
               <div style={{marginTop:14, display:"flex", gap:6}}>
                 <button className="btn" onClick={()=>setShowInvite(true)}>DAVET OLUŞTUR</button>
                 <button className="btn btn-danger" onClick={()=>{
-                  if(confirm("silinsin mi?")){ remove(ref(db,`servers/${selectedServer}`)); remove(ref(db,`serverMembers/${selectedServer}`)); remove(ref(db,`channels/${selectedServer}`)); setSelectedServer(servers.find(s=>s.id!==selectedServer)?.id||"demo"); setToast("silindi"); setShowServerSettings(false); }
+                  if(confirm("silinsin mi?")){
+                    remove(ref(db,`servers/${selectedServer}`)).catch(()=>{});
+                    remove(ref(db,`serverMembers/${selectedServer}`)).catch(()=>{});
+                    remove(ref(db,`channels/${selectedServer}`)).catch(()=>{});
+                    remove(ref(db,`categories/${selectedServer}`)).catch(()=>{});
+                    if(joinedVoice) setJoinedVoice(null);
+                    setSelectedServer("demo");
+                    setSelectedChannel("general");
+                    setToast("silindi"); setShowServerSettings(false);
+                  }
                 }}>SUNUCUYU SİL</button>
               </div>
               <div style={{marginTop:16, border:"1px solid var(--border)", padding:10, background:"var(--surface-2)"}}>
