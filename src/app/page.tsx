@@ -999,7 +999,7 @@ export default function Home(){
             <div className="channel-scroll">
               <div className="category-label">HESAP</div>
               <button className="channel-row selected" onClick={()=>setActiveView("profile")}><span className="ch-icon"><span className="icon"><Icon name="user"/></span></span><span className="ch-name">Profilim</span></button>
-              <button className="channel-row" onClick={()=>setShowUserSettings(true)}><span className="ch-icon"><span className="icon"><Icon name="settings"/></span></span><span className="ch-name">Ayarlar</span></button>
+              <button className="channel-row" onClick={()=>setShowAccountSettings(true)}><span className="ch-icon"><span className="icon"><Icon name="settings"/></span></span><span className="ch-name">Ayarlar</span></button>
               <div className="category-label" style={{marginTop:14}}>DİĞER</div>
               <button className="channel-row" onClick={()=>setActiveView("friends")}><span className="ch-icon"><span className="icon"><Icon name="users"/></span></span><span className="ch-name">Arkadaşlar</span></button>
               <button className="channel-row" onClick={()=>setActiveView("dms")}><span className="ch-icon"><span className="icon"><Icon name="dm"/></span></span><span className="ch-name">Mesajlar</span></button>
