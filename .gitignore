@@ -1,33 +1,12 @@
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Env (asla commitlenmez)
+node_modules
+.next
+out
 .env
 .env.local
 .env.*.local
-
-# Logs
-logs/
-*.log
-realtime-signaling/logs/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Temp
-temp_clone/
-__pycache__/
-
-# Supabase temp
-supabase/.temp/
-supabase/.branches/
-
-# TS build info
-*.tsbuildinfo
-
-# Frontend dist
-frontend/dist/
+service-account*.json
+worker/.env
+worker/.env.local
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
