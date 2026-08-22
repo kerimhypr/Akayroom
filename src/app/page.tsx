@@ -26,7 +26,7 @@ import { auth, db, firebaseConfigured } from "@/lib/firebase";
 import { rtcIceServers, joinSignalRoom, listenForParticipants, listenForCandidates, publishCandidate, publishOffer, publishAnswer, listenForOffers, listenForAnswers, deterministicInitiator, cleanupSignalRoom } from "@/lib/webrtc";
 import { createStarterServer } from "@/lib/seed";
 import { normalizeUsername, usernameEmail, validUsername } from "@/lib/username";
-import type { Channel, ChatMessage, Category, MessageAttachmentMeta, Server, UserProfile } from "@/lib/types";
+import type { Channel, ChatMessage, Category, MessageAttachmentMeta, Server, UserConnections, UserProfile } from "@/lib/types";
 
 function initials(v: string) { return (v?.trim()?.slice(0,2) || "??").toUpperCase(); }
 function fmtSize(bytes: number){ if(!bytes && bytes!==0) return ""; if(bytes<1024) return bytes+" B"; if(bytes<1024*1024) return (bytes/1024).toFixed(0)+" KB"; return (bytes/1024/1024).toFixed(1)+" MB"; }
@@ -79,7 +79,6 @@ function Icon({name, size=14}: {name: string, size?: number}){
 }
 const EMOJIS = ["😀","😂","❤️","🔥","👍","👎","🎉","💀","👀","⚡","✅","❌","🤖","👾"];
 const QUICK_REACTIONS = ["❤️","👍","😂"];
-const STICKERS = ["🌊","🐙","⚡","🌙","🛡️","🦈","✨","👾"];
 const DECORATIONS: {id:string, label:string, url:string}[] = [
   {id:"none", label:"YOK", url:""},
   {id:"1", label:"Alev Kılıcı", url:"https://images.weserv.nl/?url=https%3A%2F%2Fcdn.discordapp.com%2Favatar-decoration-presets%2Fa_0f5d6c4dd8ae74662ee9c40722a56cbd.png%3Fsize%3D240%26passthrough%3Dtrue&w=280&h=280&fit=contain"},
@@ -213,6 +212,11 @@ export default function Home(){
   const [showPoll,setShowPoll]=useState(false);
   const [pollQ,setPollQ]=useState("");
   const [pollOpts,setPollOpts]=useState(["",""]);
+  const [pollVotesMap,setPollVotesMap]=useState<Record<string, Record<string,string>>>({});
+  const [helpOpen,setHelpOpen]=useState(false);
+  const [connGithub,setConnGithub]=useState("");
+  const [connSpotify,setConnSpotify]=useState("");
+  const [connSite,setConnSite]=useState("");
   const [gifSearch,setGifSearch]=useState("");
   const [gifResults,setGifResults]=useState<string[]>([]);
   const [toast,setToast]=useState("");
@@ -588,17 +592,46 @@ export default function Home(){
     document.querySelectorAll<HTMLAudioElement>("audio[data-voice]").forEach(a=>{ a.volume = deafen ? 0 : 1; });
   },[deafen, remoteStreams]);
 
+  // poll votes: live sync per unique poll id (fixes "poll created but cannot vote")
+  const pollIdsKey = useMemo(()=> messages.filter(m=>m.poll).map(m=>m.poll!.id).filter((v,i,a)=>a.indexOf(v)===i).join(","), [messages]);
+  useEffect(()=>{
+    if(!user || !pollIdsKey){ setPollVotesMap({}); return; }
+    const ids = pollIdsKey.split(",");
+    const unsubs: (()=>void)[] = [];
+    ids.forEach(id=>{
+      const u = onValue(ref(db,`pollVotes/${id}`),(snap)=>{
+        const v = snap.exists() ? snap.val() as Record<string,string> : {};
+        setPollVotesMap(prev=>({...prev,[id]:v}));
+      });
+      unsubs.push(u);
+    });
+    return ()=>unsubs.forEach(fn=>{try{fn();}catch{}});
+  },[user,pollIdsKey]);
+
+  function castVote(pollId: string, optionId: string){
+    if(!user || selectedServer==="demo"){ setToast("demo sunucuda oy yok"); return; }
+    set(ref(db,`pollVotes/${pollId}/${user.uid}`), optionId).catch(()=>setToast("oy verilemedi"));
+  }
+
   useEffect(()=>{
     if(!selectedProfileUid){ setSelectedProfile(null); return; }
     setProfileLoading(true);
     get(ref(db,`users/${selectedProfileUid}/public`)).then(s=>{ if(s.exists()) setSelectedProfile(s.val()); else setSelectedProfile(null); setProfileLoading(false); }).catch(()=>setProfileLoading(false));
   },[selectedProfileUid]);
 
+  useEffect(()=>{
+    if(showUserSettings){
+      setConnGithub(profile?.connections?.github ?? "");
+      setConnSpotify(profile?.connections?.spotify ?? "");
+      setConnSite(profile?.connections?.site ?? "");
+    }
+  },[showUserSettings]);
+
   useEffect(()=>{ messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); },[messages,threadMessages, dmMsgs]);
   useEffect(()=>{
     const h=(e:KeyboardEvent)=>{
       if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="k"){ e.preventDefault(); setShowPalette(v=>!v); }
-      if(e.key==="Escape"){ setShowPalette(false); setContextMenu(null); setShowThread(false); setShowMembers(false); }
+      if(e.key==="Escape"){ setShowPalette(false); setContextMenu(null); setShowThread(false); setShowMembers(false); setHelpOpen(false); }
     };
     window.addEventListener("keydown",h); return()=>window.removeEventListener("keydown",h);
   },[]);
@@ -728,7 +761,8 @@ export default function Home(){
 
   function handleCommand(cmd:string){
     const c=cmd.toLowerCase();
-    if(c.startsWith("/giphy")){ setToast("giphy için ＋ → GIF kullan"); }
+    if(c.startsWith("/help")){ setHelpOpen(true); }
+    else if(c.startsWith("/giphy")){ setToast("giphy için ＋ → GIF kullan"); }
     else if(c.startsWith("/shrug")){ const msg= "¯\\_(ツ)_/¯ "+cmd.slice(7); const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`)); set(r,{serverId:selectedServer,channelId:selectedChannel,authorId:user!.uid,content:msg,authorName:profile?.displayName??username,createdAt:Date.now()}); }
     else if(c.startsWith("/me")){ const msg= `*${profile?.displayName??username} ${cmd.slice(4)}*`; const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`)); set(r,{serverId:selectedServer,channelId:selectedChannel,authorId:user!.uid,content:msg,authorName:profile?.displayName??username,createdAt:Date.now()}); }
     else if(c.startsWith("/clear")){ setToast("ekran temizlendi (yerel)"); setMessages([]); }
@@ -992,10 +1026,16 @@ export default function Home(){
   }
 
   const paletteItems=[
-    {id:"1",label:"Kanala git: #genel",action:()=>{setActiveView("server"); setSelectedChannel(channels.find(c=>c.type==="text")?.id||"general"); setShowPalette(false);},kbd:"↵"},
+    ...channels.filter(c=>c.type!=="voice").slice(0,8).map(c=>({
+      id:"ch-"+c.id,
+      label:`Kanala git: #${c.name}`,
+      action:()=>{ setActiveView("server"); setSelectedChannel(c.id); setShowPalette(false); },
+      kbd:"#",
+    })),
     {id:"2",label:"Davet oluştur",action:()=>{setShowInvite(true); setShowPalette(false);},kbd:"/invite"},
     {id:"3",label:"Sunucu oluştur",action:()=>{setShowCreateServer(true); setShowPalette(false);},kbd:"⌘ N"},
-    {id:"4",label:"Komutlar: /help",action:()=>{setToast("/me /shrug /nick /poll /clear /invite"); setShowPalette(false);},kbd:"/"},
+    {id:"4",label:"Komutlar: /help",action:()=>{setHelpOpen(true); setShowPalette(false);},kbd:"/"},
+    {id:"5",label:"Anket başlat (/poll)",action:()=>{setShowPoll(true); setShowPalette(false);},kbd:"/poll"},
   ].filter(it=> !paletteQ || it.label.toLowerCase().includes(paletteQ.toLowerCase()));
 
   return (
@@ -1304,7 +1344,25 @@ export default function Home(){
                       </div>
                       <div style={{marginTop:10, border:"1px solid var(--border)", background:"#000", padding:10, display:"flex", gap:8, alignItems:"center"}}>
                         <div style={{width:28, height:28, border:"1px solid var(--border)", display:"grid", placeItems:"center", background:"#111"}}><Icon name="grid"/></div>
-                        <div style={{flex:1}}><div style={{fontFamily:"var(--font-mono)", fontSize:10, fontWeight:700}}>BAĞLANTILAR</div><div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>yakında: github / spotify / site — Discord Connections gibi</div></div>
+                        {(()=>{ const cn=profile?.connections||{}; const items=[
+                          cn.github ? {k:"GITHUB", href: cn.github.startsWith("http")?cn.github:`https://github.com/${cn.github.replace(/^@/,"")}`} : null,
+                          cn.spotify ? {k:"SPOTIFY", href: cn.spotify.startsWith("http")?cn.spotify:`https://open.spotify.com/search/${encodeURIComponent(cn.spotify)}`} : null,
+                          cn.site ? {k:"SİTE", href: cn.site.startsWith("http")?cn.site:`https://${cn.site}`} : null,
+                        ].filter(Boolean) as {k:string,href:string}[];
+                        return (
+                          <div style={{flex:1}}>
+                            <div style={{fontFamily:"var(--font-mono)", fontSize:10, fontWeight:700}}>BAĞLANTILAR</div>
+                            {items.length ? (
+                              <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:4}}>
+                                {items.map(it=>(
+                                  <a key={it.k} href={it.href} target="_blank" rel="noreferrer" style={{border:"1px solid #fff", background:"#fff", color:"#000", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700, padding:"3px 8px", textDecoration:"none"}}>{it.k} ↗</a>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>bağlantı yok — ayarlardan ekle</div>
+                            )}
+                          </div>
+                        ); })()}
                         <span style={{fontFamily:"var(--font-mono)", fontSize:10, border:"1px solid var(--border)", padding:"4px 6px", color:"var(--muted)"}}>YAKINDA</span>
                       </div>
                     </div>
@@ -1415,6 +1473,29 @@ export default function Home(){
             </header>
 
             <div className="message-area" onClick={()=>{setShowEmoji(false); setShowGif(false); setShowPlusMenu(false);}}>
+              {helpOpen && (
+                <div style={{margin:"10px 16px", border:"1px solid #fff", background:"var(--surface)", padding:12, alignSelf:"center", width:"min(440px, 92%)"}} onClick={e=>e.stopPropagation()}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+                    <strong style={{fontFamily:"var(--font-mono)", fontSize:12, letterSpacing:".08em"}}>KOMUTLAR</strong>
+                    <button onClick={()=>setHelpOpen(false)} style={{border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", width:22, height:22}}>✕</button>
+                  </div>
+                  {[
+                    ["/help","bu paneli açar"],
+                    ["/me <eylem>","italik eylem mesajı atar — /me kod yazıyor"],
+                    ["/shrug <mesaj>","¯\\_(ツ)_/¯ ekler"],
+                    ["/nick <isim>","görünen adını değiştirir"],
+                    ["/poll","anket oluşturur (＋ → POLL aynı işi yapar)"],
+                    ["/invite","davet kodu üretir"],
+                    ["/clear","ekranı yerel olarak temizler"],
+                    ["Ctrl+K","hızlı komut paleti — kanal ara, komut çalıştır"],
+                  ].map(([cmd,desc])=>(
+                    <div key={cmd} style={{display:"flex", gap:10, padding:"5px 0", borderBottom:"1px dashed var(--border)"}}>
+                      <code style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, minWidth:110}}>{cmd}</code>
+                      <span style={{fontSize:11, color:"var(--muted)"}}>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {isDemo ? (
                 <div className="welcome animate-slide">
                   <div className="welcome-icon">◈</div>
@@ -1492,14 +1573,33 @@ export default function Home(){
                               <button style={{marginTop:6}} className="btn" onClick={()=>downloadAttachment(m)} disabled={c?.loading}>⎘ {c?.loading ? "hazırlanıyor…" : `${meta.name} (${fmtSize(meta.size)}) — indir`}</button>
                             );
                           })()}
-                          {m.poll && (
-                            <div className="poll">
-                              <q>{m.poll.question}</q>
-                              {m.poll.options.map(o=>(
-                                <div key={o.id} className="poll-option" onClick={()=>setToast(`oy: ${o.text}`)}><span style={{fontSize:11, fontWeight:700}}>{o.text}</span><span className="bar"><i style={{width: `${Math.round((o.votes/(m.poll!.totalVotes||1))*100)}%`}} /></span><span style={{fontFamily:"var(--font-mono)", fontSize:10}}>{o.votes}</span></div>
-                              ))}
-                            </div>
-                          )}
+                          {m.poll && (()=>{
+                            const poll=m.poll;
+                            const votes=pollVotesMap[poll.id]||{};
+                            const counts: Record<string,number> = {};
+                            poll.options.forEach(o=>{counts[o.id]=0;});
+                            Object.values(votes).forEach(opt=>{ if(counts[opt]!==undefined) counts[opt]++; });
+                            const total=Object.values(counts).reduce((a,b)=>a+b,0);
+                            const myVote=user ? votes[user.uid] : undefined;
+                            return (
+                              <div className="poll">
+                                <q>{poll.question}</q>
+                                {poll.options.map(o=>{
+                                  const n=counts[o.id]||0;
+                                  const pct= total>0 ? Math.round((n/total)*100) : 0;
+                                  return (
+                                    <div key={o.id} className="poll-option" style={myVote===o.id?{borderColor:"#fff", background:"#111"}:undefined} onClick={()=>castVote(poll.id,o.id)}>
+                                      <span style={{fontSize:11, fontWeight:700}}>{o.text}</span>
+                                      <span className="bar"><i style={{width:`${pct}%`}}/></span>
+                                      <span style={{fontFamily:"var(--font-mono)", fontSize:10}}>{n}</span>
+                                      {myVote===o.id && <span style={{fontSize:10}}>✓</span>}
+                                    </div>
+                                  );
+                                })}
+                                <div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)", marginTop:6, textAlign:"right"}}>{total} oy{myVote?" — oyunu değiştirebilirsin":""}</div>
+                              </div>
+                            );
+                          })()}
                           {Object.keys(reactions).length>0 && (
                             <div className="msg-reactions">
                               {Object.entries(reactions).map(([emoji,info])=>(
@@ -1606,7 +1706,7 @@ export default function Home(){
                         if(!pollQ.trim() || pollOpts.filter(s=>s.trim()).length<2){ setToast("en az 2 seçenek"); return; }
                         const poll={id: Math.random().toString(36).slice(2,8), question: pollQ.trim(), options: pollOpts.filter(s=>s.trim()).map((t,i)=>({id:i.toString(), text:t.trim(), votes:0})), totalVotes:0, allowMultiple:false};
                         const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
-                        set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, content: `📊 ${poll.question}`, authorName: profile?.displayName??username, createdAt: serverTimestamp(), poll});
+                        set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, content: poll.question, authorName: profile?.displayName??username, createdAt: serverTimestamp(), poll});
                         setPollQ(""); setPollOpts(["",""]); setShowPoll(false);
                       }}>GÖNDER</button>
                       <button className="btn" onClick={()=>setShowPoll(false)}>İPTAL</button>
@@ -1616,7 +1716,7 @@ export default function Home(){
               </div>
             )}
 
-            {showEmoji && <div className="picker"><div className="picker-title">EMOJİ & STICKER <button onClick={()=>setShowEmoji(false)}>✕</button></div><div className="emoji-grid">{EMOJIS.map(e=><button key={"e"+e} onClick={()=>{updateDraft(draft + e); setShowEmoji(false);}}>{e}</button>)}{STICKERS.map(s=><button key={"s"+s} onClick={()=>{updateDraft(draft + s); setShowEmoji(false);}}>{s}</button>)}</div></div>}
+            {showEmoji && <div className="picker"><div className="picker-title">EMOJİ <button onClick={()=>setShowEmoji(false)}>✕</button></div><div className="emoji-grid">{EMOJIS.map(e=><button key={e} onClick={()=>{updateDraft(draft + e); setShowEmoji(false);}}>{e}</button>)}</div></div>}
             {showGif && <div className="picker"><div className="picker-title">GIF <button onClick={()=>setShowGif(false)}>✕</button></div><div className="picker-search"><input value={gifSearch} onChange={e=>setGifSearch(e.target.value)} onKeyDown={e=> e.key==="Enter" && searchGifs()} placeholder="ara..." /><button onClick={searchGifs}>ARA</button></div><div className="gif-grid">{gifResults.map(u=><button key={u} onClick={()=>{updateDraft(draft + " " + u); setShowGif(false);}}><img src={u} alt="gif" /></button>)}{gifResults.length===0 && <div style={{gridColumn:"1 / -1", fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:8, border:"1px dashed var(--border)", textAlign:"center"}}>giphy — API boşsa çalışmaz</div>}</div></div>}
 
             {showThread && (
@@ -1812,7 +1912,15 @@ export default function Home(){
                 <div>
                   <label>BIO — HAKKIMDA</label>
                   <textarea value={profile?.bio ?? ""} onChange={e=> setProfile(p=> p? {...p, bio:e.target.value}:p)} placeholder="kendini anlat — **kalın**, `kod`, emoji" rows={2} style={{width:"100%", background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
-                  <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--dim)", textAlign:"right"}}>{(profile?.bio||"").length}/190</div>
+                </div>
+
+                <div>
+                  <label>BAĞLANTILAR — CONNECTIONS <span style={{fontWeight:400, textTransform:"none", letterSpacing:0}}>(kullanıcı adı veya tam link)</span></label>
+                  <div style={{display:"flex", flexDirection:"column", gap:6}}>
+                    <input value={connGithub} onChange={e=>setConnGithub(e.target.value)} placeholder="github: kerimhypr" style={{background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                    <input value={connSpotify} onChange={e=>setConnSpotify(e.target.value)} placeholder="spotify: kullanıcı adı veya link" style={{background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                    <input value={connSite} onChange={e=>setConnSite(e.target.value)} placeholder="site: example.com" style={{background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                  </div>
                 </div>
 
                 <div style={{borderTop:"1px solid var(--border)", paddingTop:12}}>
@@ -1879,6 +1987,7 @@ export default function Home(){
                     decoration: profile.decoration||"",
                     badges: profile.badges||[],
                     accentColor: profile.accentColor||"",
+                    connections: { github: connGithub.trim(), spotify: connSpotify.trim(), site: connSite.trim() },
                   });
                   setToast("profil güncellendi"); setShowUserSettings(false);
                 }}>KAYDET</button>
@@ -2025,8 +2134,45 @@ export default function Home(){
                 }}>SUNUCUYU SİL</button>
               </div>
               <div style={{marginTop:16, border:"1px solid var(--border)", padding:10, background:"var(--surface-2)"}}>
-                <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>ROLLER</div>
-                <div style={{marginTop:8, fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>owner / admin / member — hiyerarşi yakında burada yönetilecek.</div>
+                <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>ROLLER — {members.length} üye</div>
+                {(()=> {
+                  const myRole = members.find(m=>m.uid===user?.uid)?.role || "member";
+                  const canManage = myRole==="owner" || myRole==="admin";
+                  const ownerCount = members.filter(m=>m.role==="owner").length;
+                  const setRole = async (uid:string, role:string, currentRole:string) => {
+                    if(!user) return;
+                    if(role===currentRole) return;
+                    if(currentRole==="owner" && role!=="owner" && ownerCount<=1){ setToast("son owner düşürülemez"); return; }
+                    if(myRole==="admin" && (currentRole==="owner" || role==="owner")){ setToast("admin owner atayamaz/düşüremez"); return; }
+                    try{
+                      await update(ref(db,`serverMembers/${selectedServer}/${uid}`),{role});
+                      setToast("rol güncellendi");
+                    }catch{ setToast("yetkin yok"); }
+                  };
+                  if(members.length===0) return <div style={{marginTop:8, fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>üye yok</div>;
+                  return (
+                    <div style={{marginTop:8, display:"flex", flexDirection:"column", gap:4}}>
+                      {members.map(m=>(
+                        <div key={m.uid} style={{display:"flex", alignItems:"center", gap:8, border:"1px solid var(--border)", background:"#000", padding:"5px 8px"}}>
+                          <div style={{width:22, height:22, borderRadius:"50%", background:"#111", color:"#fff", display:"grid", placeItems:"center", fontSize:9, fontWeight:700, overflow:"hidden"}}>
+                            {m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}
+                          </div>
+                          <span style={{flex:1, minWidth:0, fontFamily:"var(--font-mono)", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile?.displayName||m.profile?.username||m.uid.slice(0,6)}</span>
+                          {canManage && m.uid!==user?.uid ? (
+                            <select value={m.role} onChange={e=>setRole(m.uid, e.target.value, m.role)} style={{background:"#000", border:"1px solid var(--border)", color:"#fff", fontFamily:"var(--font-mono)", fontSize:10, padding:"2px 4px"}}>
+                              <option value="member">member</option>
+                              <option value="admin">admin</option>
+                              <option value="owner">owner</option>
+                            </select>
+                          ) : (
+                            <span style={{fontFamily:"var(--font-mono)", fontSize:10, color: m.role==="owner"?"#fff":"var(--muted)", border:"1px solid var(--border)", padding:"2px 6px"}}>{m.role}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+                <div style={{marginTop:6, fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>owner: her şey • admin: rolleri yönetir • member: sohbet</div>
               </div>
             </div>
           </div>
@@ -2070,6 +2216,18 @@ export default function Home(){
                   </div>
                   <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>@{selectedProfile.username} • {selectedProfile.customStatusEmoji || ""} {selectedProfile.customStatus || selectedProfile.statusText || ""}</div>
                   {selectedProfile.bio ? <div style={{marginTop:10, border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, fontSize:12, lineHeight:1.6, whiteSpace:"pre-wrap"}}><RenderContent text={selectedProfile.bio}/></div> : <div style={{marginTop:10, fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", border:"1px dashed var(--border)", padding:8, textAlign:"center"}}>bio yok</div>}
+                  {(()=>{ const cn=selectedProfile.connections||{}; const items=[
+                    cn.github ? {k:"GITHUB", href: cn.github.startsWith("http")?cn.github:`https://github.com/${cn.github.replace(/^@/,"")}`} : null,
+                    cn.spotify ? {k:"SPOTIFY", href: cn.spotify.startsWith("http")?cn.spotify:`https://open.spotify.com/search/${encodeURIComponent(cn.spotify)}`} : null,
+                    cn.site ? {k:"SİTE", href: cn.site.startsWith("http")?cn.site:`https://${cn.site}`} : null,
+                  ].filter(Boolean) as {k:string,href:string}[];
+                  return items.length ? (
+                    <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:10}}>
+                      {items.map(it=>(
+                        <a key={it.k} href={it.href} target="_blank" rel="noreferrer" style={{border:"1px solid var(--border)", background:"#fff", color:"#000", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700, padding:"3px 8px", textDecoration:"none"}}>{it.k} ↗</a>
+                      ))}
+                    </div>
+                  ) : null; })()}
                   <div style={{marginTop:10, display:"flex", gap:6, fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>
                     <span>katılım {selectedProfile.createdAt ? fmtDate(selectedProfile.createdAt) : ""}</span>
                     <span>•</span>

@@ -108,8 +108,8 @@ html { scroll-behavior: smooth; }
 .auth-glow { display:none; }
 
 /* --- APP SHELL --- */
-.app-shell { padding-bottom:0;
-  min-height:100vh; display:grid;
+ .app-shell { padding-bottom:0;
+ height:100dvh; overflow:hidden; display:grid; grid-template-rows:minmax(0,1fr);
   grid-template-columns: 64px 280px minmax(0,1fr) 240px;
   background: var(--bg);
 }

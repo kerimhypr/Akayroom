@@ -1,3 +1,9 @@
+export type UserConnections = {
+  github?: string;
+  spotify?: string;
+  site?: string;
+};
+
 export type UserProfile = {
   username: string;
   usernameLower: string;
@@ -15,6 +21,7 @@ export type UserProfile = {
   decoration?: string;
   status?: "online" | "idle" | "dnd" | "offline" | "invisible";
   statusText?: string;
+  connections?: UserConnections;
   createdAt: number;
 };
 
