@@ -264,8 +264,10 @@ export default function Home(){
   const [members,setMembers]=useState<{uid:string, profile:UserProfile|null, role:string}[]>([]);
   const [dmThreads,setDmThreads]=useState<{id:string, otherUid:string, profile:UserProfile|null, lastAt:number}[]>([]);
   const [selectedDm,setSelectedDm]=useState<string|null>(null);
-  const [dmMsgs,setDmMsgs]=useState<{id:string, authorId:string, content:string, createdAt:number, attachment?: MessageAttachmentMeta|null}[]>([]);
+  const [dmMsgs,setDmMsgs]=useState<{id:string, authorId:string, content:string, createdAt:number, editedAt?:number, attachment?: MessageAttachmentMeta|null}[]>([]);
   const [dmDraft,setDmDraft]=useState("");
+  const [dmEditingId,setDmEditingId]=useState<string|null>(null);
+  const [dmEditContent,setDmEditContent]=useState("");
   const [dmPendingFile,setDmPendingFile]=useState<{file:File,preview?:string}|null>(null);
   const [dmAttachmentCache,setDmAttachmentCache]=useState<Record<string,{loading?:boolean,dataUrl?:string,error?:string}>>({});
   const [friends,setFriends]=useState<{uid:string, profile:UserProfile|null}[]>([]);
@@ -953,6 +955,21 @@ export default function Home(){
     setDmDraft(""); setDmPendingFile(null);
   }
 
+  async function deleteDMMessage(id:string){
+    if(!user || !selectedDm) return;
+    const msg=dmMsgs.find(m=>m.id===id);
+    if(!msg || msg.authorId!==user.uid){setToast("sadece kendi mesajın");return;}
+    await remove(ref(db,`dmMessages/${selectedDm}/${id}`));
+  }
+
+  async function saveDMEdit(){
+    if(!user || !selectedDm || !dmEditingId || !dmEditContent.trim()) return;
+    const msg=dmMsgs.find(m=>m.id===dmEditingId);
+    if(!msg || msg.authorId!==user.uid){setToast("sadece kendi mesajın");return;}
+    await update(ref(db,`dmMessages/${selectedDm}/${dmEditingId}`),{content:dmEditContent.trim(),editedAt:Date.now()});
+    setDmEditingId(null); setDmEditContent("");
+  }
+
   function handleDmFile(file: File){
     const kind=attachmentKind(file);
     const cap=kind==="video"||kind==="audio" ? 5*1024*1024 : kind==="image" ? 15*1024*1024 : 2*1024*1024;
@@ -1118,10 +1135,6 @@ export default function Home(){
                   henüz sunucun yok.<br/>oluştur ve başla.
                 </div>
                 <button className="btn btn-primary" onClick={()=>setShowCreateServer(true)}>SUNUCU OLUŞTUR</button>
-                <div style={{display:"flex", gap:6}}>
-                  <input value={joinCode} onChange={e=>setJoinCode(e.target.value)} placeholder="davet kodu" style={{flex:1, background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:11}} />
-                  <button className="btn" onClick={joinViaInvite} disabled={joiningInvite}>{joiningInvite ? "..." : "KATIL"}</button>
-                </div>
               </div>
             ) : (
               <>
@@ -1235,7 +1248,6 @@ export default function Home(){
               <button className="channel-row" onClick={()=>setShowAccountSettings(true)}><span className="ch-icon"><span className="icon"><Icon name="settings"/></span></span><span className="ch-name">Ayarlar</span></button>
               <div className="category-label" style={{marginTop:14}}>DİĞER</div>
               <button className="channel-row" onClick={()=>setActiveView("friends")}><span className="ch-icon"><span className="icon"><Icon name="users"/></span></span><span className="ch-name">Arkadaşlar</span></button>
-              <button className="channel-row" onClick={()=>setActiveView("dms")}><span className="ch-icon"><span className="icon"><Icon name="dm"/></span></span><span className="ch-name">Mesajlar</span></button>
               <div style={{marginTop:16, border:"1px solid var(--border)", padding:10, background:"var(--surface-2)"}}>
                 <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:6}}>PROFİL FOTOĞRAFI</div>
                 <div style={{width:64, height:64, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"visible", marginBottom:8, position:"relative", borderRadius:"50%"}}>
@@ -1407,7 +1419,6 @@ export default function Home(){
                   <div style={{border:"1px solid var(--border)", background:"var(--surface)", padding:10, display:"flex", gap:6, flexWrap:"wrap"}}>
                     <button className="btn" onClick={()=>setShowUserSettings(true)}>PROFİLİ SÜSLE</button>
                     <button className="btn btn-primary" onClick={()=>setActiveView("friends")}>ARKADAŞLAR</button>
-                    <button className="btn" onClick={()=>setActiveView("dms")}>MESAJLAR</button>
                     <label style={{marginLeft:"auto", border:"1px dashed var(--border)", padding:"7px 10px", fontFamily:"var(--font-mono)", fontSize:10, cursor:"pointer"}}>
                       AVATAR
                       <input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0]; if(f) handleAvatarFile(f);}} />
@@ -1420,8 +1431,9 @@ export default function Home(){
             <>
               <header className="chat-header">
                 <div className="channel-heading"><span className="hash"><span className="icon"><Icon name="dm"/></span></span><strong>{dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName || "MESAJLAR"}</strong><span className="topic">uçtan uca • RTDB</span></div>
-                <div className="header-actions"><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ara"/></div></div>
+                <div className="header-actions"><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{if(!selectedDm)return;setJoinedVoice(joinedVoice===selectedDm?null:selectedDm);setToast(joinedVoice===selectedDm?"DM araması kapandı":"DM araması başlatıldı — karşı taraf da mikrofona bassın")}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid #fff":"1px solid var(--border)",background:joinedVoice===selectedDm?"#fff":"transparent",color:joinedVoice===selectedDm?"#000":"var(--muted)"}}><span className="icon"><Icon name="mic"/></span></button></div>
               </header>
+              {joinedVoice===selectedDm && <div style={{padding:"6px 16px",borderBottom:"1px solid var(--border)",background:"var(--surface-2)",fontFamily:"var(--font-mono)",fontSize:10,display:"flex",alignItems:"center",gap:8}}><span>● DM ARAMASI AKTİF</span>{Object.entries(remoteStreams).map(([uid,stream])=><audio key={uid} autoPlay playsInline data-voice ref={el=>{if(el){el.srcObject=stream;el.volume=deafen?0:1;void el.play().catch(()=>{});}}}/>)}<button className="btn" onClick={()=>setJoinedVoice(null)} style={{marginLeft:"auto",padding:"4px 8px"}}>KAPAT</button></div>}
               <div className="message-area" style={{padding:16}}>
                 {!selectedDm ? (
                   <div className="empty-state"><div className="empty-orb"><span className="icon"><Icon name="dm"/></span></div><h2>DM seç</h2><p>soldan bir kişi seç veya arkadaş ekle.</p></div>
@@ -1430,7 +1442,7 @@ export default function Home(){
                 ) : dmMsgs.filter(m=> !search || m.content.toLowerCase().includes(search.toLowerCase()) || m.attachment?.name.toLowerCase().includes(search.toLowerCase())).map(m=>(
                   <div key={m.id} className={`message-row ${m.authorId===user.uid ? "" : ""}`} style={{maxWidth:760, margin:"0 auto", width:"100%"}}>
                     <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorId===user.uid ? (profile?.displayName||username) : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"??"))}</button>
-                    <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)}</span></div><div className="msg-content">{m.content}</div>{m.attachment && (()=>{const c=dmAttachmentCache[m.id]; return c?.dataUrl ? (m.attachment.type==="image" ? <img src={c.dataUrl} alt={m.attachment.name} style={{marginTop:6,maxWidth:"100%",maxHeight:340,objectFit:"contain",display:"block"}}/> : m.attachment.type==="video" ? <video src={c.dataUrl} controls style={{marginTop:6,maxWidth:"100%",maxHeight:360,display:"block"}}/> : m.attachment.type==="audio" ? <audio src={c.dataUrl} controls style={{marginTop:6,width:"100%"}}/> : <a href={c.dataUrl} download={m.attachment.name} className="btn" style={{display:"inline-block",marginTop:6}}>⎘ {m.attachment.name}</a>) : <button className="btn" style={{marginTop:6}} onClick={()=>loadDmAttachment(m)} disabled={c?.loading}>{c?.loading?"yükleniyor…":`📎 ${m.attachment.name} (${fmtSize(m.attachment.size)}) — aç`}</button>;})()}</div>
+                    <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)} {m.editedAt?"(düzenlendi)":""}</span></div>{dmEditingId===m.id ? <div style={{display:"flex",gap:6}}><input value={dmEditContent} onChange={e=>setDmEditContent(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void saveDMEdit();if(e.key==="Escape")setDmEditingId(null)}} autoFocus style={{flex:1,background:"#000",border:"1px solid #fff",color:"#fff",padding:6}}/><button className="btn btn-primary" onClick={()=>void saveDMEdit()}>KAYDET</button><button className="btn" onClick={()=>setDmEditingId(null)}>İPTAL</button></div> : <><div className="msg-content">{m.content}</div>{m.attachment && (()=>{const c=dmAttachmentCache[m.id]; return c?.dataUrl ? (m.attachment.type==="image" ? <img src={c.dataUrl} alt={m.attachment.name} style={{marginTop:6,maxWidth:"100%",maxHeight:340,objectFit:"contain",display:"block"}}/> : m.attachment.type==="video" ? <video src={c.dataUrl} controls style={{marginTop:6,maxWidth:"100%",maxHeight:360,display:"block"}}/> : m.attachment.type==="audio" ? <audio src={c.dataUrl} controls style={{marginTop:6,width:"100%"}}/> : <a href={c.dataUrl} download={m.attachment.name} className="btn" style={{display:"inline-block",marginTop:6}}>⎘ {m.attachment.name}</a>) : <button className="btn" style={{marginTop:6}} onClick={()=>loadDmAttachment(m)} disabled={c?.loading}>{c?.loading?"yükleniyor…":`📎 ${m.attachment.name} (${fmtSize(m.attachment.size)}) — aç`}</button>;})()}</>} {m.authorId===user.uid && <div className="msg-actions"><button onClick={()=>{setDmEditingId(m.id);setDmEditContent(m.content)}}>✎</button><button onClick={()=>void deleteDMMessage(m.id)}>⌫</button></div>}</div>
                   </div>
                 ))}
               </div>
