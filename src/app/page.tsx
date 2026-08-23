@@ -283,6 +283,7 @@ export default function Home(){
   const screenCanvasRef = useRef<HTMLCanvasElement|null>(null);
   const screenCaptureActive = useRef(false);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
+  const videoTransceiversRef = useRef<Record<string, RTCRtpTransceiver>>({});
   const [pinnedIds,setPinnedIds]=useState<Set<string>>(new Set());
   const [reactionMap,setReactionMap]=useState<Record<string, Record<string,{count:number,me:boolean}>>>({});
   const [contextMenu,setContextMenu]=useState<{x:number,y:number,msg:ChatMessage}|null>(null);
@@ -715,7 +716,8 @@ export default function Home(){
           pcsRef.current[remoteUid] = pc;
           localStream.getTracks().forEach(tr=> pc.addTrack(tr, localStream));
           // Reserve a video transceiver so we can replaceTrack later without renegotiation
-          pc.addTransceiver("video", {direction: "sendrecv"});
+          const vTrans = pc.addTransceiver("video", {direction: "sendrecv"});
+          videoTransceiversRef.current[remoteUid] = vTrans;
           pc.ontrack = (e)=>{
             const stream = e.streams[0];
             setRemoteStreams(prev=> ({...prev, [remoteUid]: stream}));
@@ -767,6 +769,7 @@ export default function Home(){
       }
       Object.values(pcsRef.current).forEach(pc=>{ try{pc.close();}catch{} });
       pcsRef.current = {};
+      videoTransceiversRef.current = {};
     };
   },[user, joinedVoice, selectedServer, activeView]);
   useEffect(()=>{
@@ -1124,11 +1127,8 @@ export default function Home(){
 
   // Replace the video track on all peer connections (no renegotiation needed)
   function replaceVideoTrackOnAllPeers(track: MediaStreamTrack | null){
-    Object.values(pcsRef.current).forEach(pc=>{
-      const trans = pc.getTransceivers().find(t=>t.receiver.track.kind==="video");
-      if(trans){
-        void trans.sender.replaceTrack(track).catch(()=>{});
-      }
+    Object.entries(videoTransceiversRef.current).forEach(([uid, trans])=>{
+      void trans.sender.replaceTrack(track).catch(()=>{});
     });
   }
 
