@@ -283,7 +283,9 @@ export default function Home(){
   const screenCanvasRef = useRef<HTMLCanvasElement|null>(null);
   const screenCaptureActive = useRef(false);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
-  const videoTransceiversRef = useRef<Record<string, RTCRtpTransceiver>>({});
+  const videoSendersRef = useRef<Record<string, RTCRtpSender>>({});
+  const mutedAvRef = useRef<{track: MediaStreamTrack, stream: MediaStream}|null>(null);
+  const [remoteCamStatus,setRemoteCamStatus]=useState<Record<string,"on"|"screen">>({});
   const [pinnedIds,setPinnedIds]=useState<Set<string>>(new Set());
   const [reactionMap,setReactionMap]=useState<Record<string, Record<string,{count:number,me:boolean}>>>({});
   const [contextMenu,setContextMenu]=useState<{x:number,y:number,msg:ChatMessage}|null>(null);
@@ -715,11 +717,20 @@ export default function Home(){
           const pc = new RTCPeerConnection({iceServers: rtcIceServers});
           pcsRef.current[remoteUid] = pc;
           localStream.getTracks().forEach(tr=> pc.addTrack(tr, localStream));
-          // Reserve a video transceiver so we can replaceTrack later without renegotiation
-          const vTrans = pc.addTransceiver("video", {direction: "sendrecv"});
-          videoTransceiversRef.current[remoteUid] = vTrans;
+          // Add a real (muted) video track at negotiation time so the remote side gets ontrack;
+          // a real camera/screen track replaces it later via replaceTrack.
+          const placeholder = getMutedPlaceholder();
+          if(placeholder){
+            const sender = pc.addTrack(placeholder.track, placeholder.stream);
+            videoSendersRef.current[remoteUid] = sender;
+          }
           pc.ontrack = (e)=>{
-            const stream = e.streams[0];
+            let stream = e.streams[0];
+            if(!stream){
+              // some browsers attach the track without a stream — wrap it
+              stream = new MediaStream();
+              stream.addTrack(e.track);
+            }
             setRemoteStreams(prev=> ({...prev, [remoteUid]: stream}));
           };
           pc.onicecandidate = (e)=>{
@@ -769,7 +780,7 @@ export default function Home(){
       }
       Object.values(pcsRef.current).forEach(pc=>{ try{pc.close();}catch{} });
       pcsRef.current = {};
-      videoTransceiversRef.current = {};
+      videoSendersRef.current = {};
     };
   },[user, joinedVoice, selectedServer, activeView]);
   useEffect(()=>{
@@ -1127,10 +1138,44 @@ export default function Home(){
 
   // Replace the video track on all peer connections (no renegotiation needed)
   function replaceVideoTrackOnAllPeers(track: MediaStreamTrack | null){
-    Object.entries(videoTransceiversRef.current).forEach(([uid, trans])=>{
-      void trans.sender.replaceTrack(track).catch(()=>{});
+    Object.entries(videoSendersRef.current).forEach(([uid, sender])=>{
+      void sender.replaceTrack(track).catch(()=>{});
     });
   }
+
+  // A black 1x1 video track so negotiation has a real video track; replaced later by camera/screen
+  function getMutedPlaceholder(){
+    if(mutedAvRef.current) return mutedAvRef.current;
+    const canvas = typeof document!=="undefined" ? document.createElement("canvas") : null;
+    if(canvas){
+      canvas.width = 1; canvas.height = 1;
+      const ctx = canvas.getContext("2d");
+      if(ctx) ctx.fillRect(0,0,1,1);
+      const stream = canvas.captureStream(1);
+      const track = stream.getVideoTracks()[0];
+      if(track) track.enabled = true;
+      mutedAvRef.current = {track, stream};
+      return mutedAvRef.current;
+    }
+    return null;
+  }
+
+  function setCamRemoteStatus(status: "on"|"screen"|null){
+    if(!user || !joinedVoice) return;
+    const roomKey = `${activeView==="dms" ? "dmSignaling" : "signaling"}/${joinedVoice}`;
+    if(status===null){ void remove(ref(db, `${roomKey}/camStatus/${user.uid}`)).catch(()=>{}); }
+    else { void set(ref(db, `${roomKey}/camStatus/${user.uid}`), status).catch(()=>{}); }
+  }
+
+  // Listen for others' camera/screen status in the current room
+  useEffect(()=>{
+    if(!user || !joinedVoice){ setRemoteCamStatus({}); return; }
+    const roomKey = `${activeView==="dms" ? "dmSignaling" : "signaling"}/${joinedVoice}`;
+    return onValue(ref(db, `${roomKey}/camStatus`), (snap)=>{
+      if(!snap.exists()){ setRemoteCamStatus({}); return; }
+      setRemoteCamStatus(snap.val() as Record<string,"on"|"screen">);
+    });
+  },[user, joinedVoice, activeView]);
 
   function stopCamAndScreen(){
     const cam = camStreamRef.current;
@@ -1140,6 +1185,7 @@ export default function Home(){
     screenCaptureActive.current = false;
     setCamOn(false);
     setScreenSharing(false);
+    setCamRemoteStatus(null);
   }
 
   async function toggleCam(){
@@ -1148,6 +1194,7 @@ export default function Home(){
       const cam = camStreamRef.current;
       if(cam){ cam.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); camStreamRef.current = null; }
       setCamOn(false);
+      setCamRemoteStatus(null);
       replaceVideoTrackOnAllPeers(null);
       return;
     }
@@ -1158,6 +1205,7 @@ export default function Home(){
       replaceVideoTrackOnAllPeers(vtr);
       setCamOn(true);
       setScreenSharing(false);
+      setCamRemoteStatus("on");
     }catch(e:any){
       setToast(e?.message?.includes("NotAllowed") ? "kamera izni gerekli" : "kamera: " + (e?.message||"hata"));
     }
@@ -1225,6 +1273,7 @@ export default function Home(){
       screenStreamRef.current = display;
       screenCaptureActive.current = true;
       setScreenSharing(true);
+      setCamRemoteStatus("screen");
       rafId = requestAnimationFrame(drawAndSend);
 
       // when the user stops sharing via browser UI
@@ -1237,6 +1286,7 @@ export default function Home(){
         screenStreamRef.current = null;
         replaceVideoTrackOnAllPeers(null);
         setScreenSharing(false);
+        setCamRemoteStatus(null);
       });
     }catch(e:any){
       setToast(e?.message?.includes("NotAllowed") ? "ekran paylaşımı izni gerekli" : "paylaşım: " + (e?.message||"hata"));
@@ -1250,6 +1300,7 @@ export default function Home(){
     replaceVideoTrackOnAllPeers(null);
     setScreenSharing(false);
     setShowScreenPanel(false);
+    setCamRemoteStatus(null);
   }
 
 
@@ -3143,14 +3194,14 @@ export default function Home(){
                 {Object.entries(voiceParticipants).map(([uid, info])=>(
                   <div key={uid} className="call-card">
                     <div className="call-video-box">
-                      {remoteStreams[uid] && remoteStreams[uid].getVideoTracks().length > 0 ? (
+                      {remoteCamStatus[uid] && remoteStreams[uid] ? (
                         <video autoPlay playsInline ref={el=>{ if(el && remoteStreams[uid]) el.srcObject = remoteStreams[uid]; }}/>
                       ) : (
                         <div className="call-avatar">{info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
                       )}
                     </div>
                     <div className="call-name">{info.profile?.displayName || info.profile?.username || uid.slice(0,6)}</div>
-                    <div className="call-status"><span className="icon"><Icon name="mic" size={11}/></span> {remoteStreams[uid] ? (remoteStreams[uid].getVideoTracks().length > 0 ? "kamera + ses" : "bağlı") : "bağlanıyor…"}</div>
+                    <div className="call-status"><span className="icon"><Icon name="mic" size={11}/></span> {remoteCamStatus[uid]==="screen" ? "ekran paylaşıyor" : remoteCamStatus[uid] ? "kamera açık" : remoteStreams[uid] ? "bağlı" : "bağlanıyor…"}</div>
                   </div>
                 ))}
                 {Object.keys(voiceParticipants).length===0 && <div className="call-empty">başka kimse yok — davet et</div>}
