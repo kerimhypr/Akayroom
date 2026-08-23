@@ -610,14 +610,29 @@ export default function Home(){
     });
   },[user]);
 
-  // Listen for refused/accepted events sent to me (3s toast)
+  // Listen for accepted/refused/removed events sent to me (3s toast + kendi tarafımı senkronize et)
   useEffect(()=>{
     if(!user) return;
     return onChildAdded(ref(db,`friendRequests/${user.uid}/events`),(snap)=>{
-      const ev = snap.val() as {type:string, fromName?:string};
+      const ev = snap.val() as {type:string, fromName?:string, byUid?:string};
       if(!ev) return;
-      const text = ev.type==="accepted" ? `${ev.fromName||"biri"} arkadaşlık isteğini kabul etti ✓` : `${ev.fromName||"biri"} arkadaşlık isteğini reddetti ✕`;
-      setToastFlash({id:`ev-${snap.key}`, text});
+      const who = ev.fromName || "biri";
+      const by = ev.byUid && ev.byUid!==user.uid ? ev.byUid : null;
+      let text = "";
+      if(ev.type==="accepted"){
+        text = `${who} arkadaşlık isteğini kabul etti ✓`;
+        if(by){
+          void set(ref(db,`friends/${user.uid}/${by}`), true).catch(()=>{});
+          void remove(ref(db,`friendRequests/${user.uid}/outgoing/${by}`)).catch(()=>{});
+        }
+      } else if(ev.type==="rejected"){
+        text = `${who} arkadaşlık isteğini reddetti ✕`;
+        if(by) void remove(ref(db,`friendRequests/${user.uid}/outgoing/${by}`)).catch(()=>{});
+      } else if(ev.type==="removed"){
+        text = `${who} seni arkadaşlıktan çıkardı`;
+        if(by) void remove(ref(db,`friends/${user.uid}/${by}`)).catch(()=>{});
+      }
+      if(text) setToastFlash({id:`ev-${snap.key}`, text});
       void remove(ref(db,`friendRequests/${user.uid}/events/${snap.key}`)).catch(()=>{});
     });
   },[user]);
@@ -632,6 +647,33 @@ export default function Home(){
       Object.entries(raw).forEach(([k, v])=>{ asTs[k] = typeof v==="number" ? v : (v?.createdAt || Date.now()); });
       setSentRequests(asTs);
     });
+  },[user]);
+
+  // Self-heal: zaten arkadaş olunan kişiler için takılı kalan istek kayıtlarını temizle
+  // (eski yarım kalmış kabul/red işlemlerinden artan veriler)
+  useEffect(()=>{
+    if(!user) return;
+    let cancelled = false;
+    void (async ()=>{
+      try{
+        const fs = await get(ref(db,`friends/${user.uid}`));
+        const friendIds = new Set(fs.exists()? Object.keys(fs.val() as Record<string,any>) : []);
+        if(friendIds.size===0 || cancelled) return;
+        const out = await get(ref(db,`friendRequests/${user.uid}/outgoing`));
+        if(out.exists()){
+          for(const k of Object.keys(out.val() as Record<string,any>)){
+            if(friendIds.has(k)) void remove(ref(db,`friendRequests/${user.uid}/outgoing/${k}`)).catch(()=>{});
+          }
+        }
+        const inc = await get(ref(db,`friendRequests/${user.uid}/incoming`));
+        if(inc.exists()){
+          for(const k of Object.keys(inc.val() as Record<string,any>)){
+            if(friendIds.has(k)) void remove(ref(db,`friendRequests/${user.uid}/incoming/${k}`)).catch(()=>{});
+          }
+        }
+      }catch{}
+    })();
+    return ()=>{ cancelled=true; };
   },[user]);
 
   // Listen for incoming server invites
@@ -1360,11 +1402,12 @@ export default function Home(){
   async function acceptFriendRequest(fromUid: string){
     if(!user) return;
     try{
+      // Sadece kendi düğümlerimize yazıyoruz (kurallar buna izin verir).
+      // Karşı tarafın friends/outgoing güncellemesini karşı tarafın istemcisi
+      // "accepted" eventini alınca yapar (çevrimdışıysa login'de işlenir).
       await set(ref(db,`friends/${user.uid}/${fromUid}`), true);
-      await set(ref(db,`friends/${fromUid}/${user.uid}`), true);
       await remove(ref(db,`friendRequests/${user.uid}/incoming/${fromUid}`));
-      await remove(ref(db,`friendRequests/${fromUid}/outgoing/${user.uid}`));
-      await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"accepted", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
+      await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"accepted", byUid:user.uid, fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
       setToast("arkadaş oldun ✓");
     }catch{ setToast("işlem başarısız"); }
   }
@@ -1373,8 +1416,7 @@ export default function Home(){
     if(!user) return;
     try{
       await remove(ref(db,`friendRequests/${user.uid}/incoming/${fromUid}`));
-      await remove(ref(db,`friendRequests/${fromUid}/outgoing/${user.uid}`));
-      await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"rejected", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
+      await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"rejected", byUid:user.uid, fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
       setToast("istek reddedildi");
     }catch{ setToast("işlem başarısız"); }
   }
@@ -1393,7 +1435,9 @@ export default function Home(){
     if(!confirm("arkadaşlıktan çıkarılsın mı? karşı taraftan da silinecek.")) return;
     try{
       await remove(ref(db,`friends/${user.uid}/${friendUid}`));
-      await remove(ref(db,`friends/${friendUid}/${user.uid}`));
+      // Karşı tarafın friends düğümüne yazma iznimiz yok; event ile bildir,
+      // kendi tarafını istemcisi temizleyecek.
+      await set(ref(db,`friendRequests/${friendUid}/events/${Date.now()}`), {type:"removed", byUid:user.uid, fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
       setFriends(prev=> prev.filter(f=>f.uid!==friendUid));
       setToast("arkadaşlıktan çıkarıldı");
     }catch{ setToast("işlem başarısız"); }
