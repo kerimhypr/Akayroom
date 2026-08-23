@@ -78,6 +78,9 @@ function Icon({name, size=14}: {name: string, size?: number}){
     phone: <><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.64.29 1.27.5 1.87a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.6.21 1.23.38 1.87.5A2 2 0 0 1 22 16.92z"/></>,
     phoneOff: <><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" x2="2" y1="2" y2="22"/></>,
     minimize: <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>,
+    cam: <><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>,
+    camOff: <><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/><line x1="1" x2="23" y1="1" y2="23"/></>,
+    screen: <><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>,
     user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
   };
   return <svg {...common}>{paths[name] ?? paths.hash}</svg>;
@@ -260,6 +263,12 @@ export default function Home(){
   const [joinedVoice,setJoinedVoice]=useState<string|null>(null);
   const [micMuted,setMicMuted]=useState(false);
   const [deafen,setDeafen]=useState(false);
+  const [camOn,setCamOn]=useState(false);
+  const [screenSharing,setScreenSharing]=useState(false);
+  const [screenSettings,setScreenSettings]=useState({w:1280, h:720, fps:30});
+  const screenSettingsRef = useRef(screenSettings);
+  screenSettingsRef.current = screenSettings;
+  const [showScreenPanel,setShowScreenPanel]=useState(false);
   const [incomingCall,setIncomingCall]=useState<null|{threadId:string, fromUid:string, fromName?:string}>(null);
   const [callPip,setCallPip]=useState(false);
   const [callPipPos,setCallPipPos]=useState(()=>{
@@ -269,6 +278,10 @@ export default function Home(){
   const [voiceParticipants,setVoiceParticipants]=useState<Record<string, {profile: UserProfile|null, joinedAt:number}>>({});
   const [remoteStreams,setRemoteStreams]=useState<Record<string, MediaStream>>({});
   const localStreamRef = useRef<MediaStream|null>(null);
+  const camStreamRef = useRef<MediaStream|null>(null);
+  const screenStreamRef = useRef<MediaStream|null>(null);
+  const screenCanvasRef = useRef<HTMLCanvasElement|null>(null);
+  const screenCaptureActive = useRef(false);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const [pinnedIds,setPinnedIds]=useState<Set<string>>(new Set());
   const [reactionMap,setReactionMap]=useState<Record<string, Record<string,{count:number,me:boolean}>>>({});
@@ -701,6 +714,8 @@ export default function Home(){
           const pc = new RTCPeerConnection({iceServers: rtcIceServers});
           pcsRef.current[remoteUid] = pc;
           localStream.getTracks().forEach(tr=> pc.addTrack(tr, localStream));
+          // Reserve a video transceiver so we can replaceTrack later without renegotiation
+          pc.addTransceiver("video", {direction: "sendrecv"});
           pc.ontrack = (e)=>{
             const stream = e.streams[0];
             setRemoteStreams(prev=> ({...prev, [remoteUid]: stream}));
@@ -720,7 +735,7 @@ export default function Home(){
           (async()=>{
             try{
               if(createOffer){
-                const offer = await pc.createOffer({offerToReceiveAudio:true});
+                const offer = await pc.createOffer({offerToReceiveAudio:true, offerToReceiveVideo:true});
                 await pc.setLocalDescription(offer);
                 await publishOffer(room, myUid, remoteUid, offer);
               } else if(remoteOffer){
@@ -754,8 +769,6 @@ export default function Home(){
       pcsRef.current = {};
     };
   },[user, joinedVoice, selectedServer, activeView]);
-
-  // mic mute
   useEffect(()=>{
     if(localStreamRef.current){
       localStreamRef.current.getAudioTracks().forEach(tr=> tr.enabled = !micMuted);
@@ -1105,8 +1118,140 @@ export default function Home(){
     if(activeView==="dms"){
       await endDmCall(joinedVoice, user.uid).catch(()=>{});
     }
+    stopCamAndScreen();
     setJoinedVoice(null);
   }
+
+  // Replace the video track on all peer connections (no renegotiation needed)
+  function replaceVideoTrackOnAllPeers(track: MediaStreamTrack | null){
+    Object.values(pcsRef.current).forEach(pc=>{
+      const trans = pc.getTransceivers().find(t=>t.receiver.track.kind==="video");
+      if(trans){
+        void trans.sender.replaceTrack(track).catch(()=>{});
+      }
+    });
+  }
+
+  function stopCamAndScreen(){
+    const cam = camStreamRef.current;
+    if(cam){ cam.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); camStreamRef.current = null; }
+    const scr = screenStreamRef.current;
+    if(scr){ scr.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); screenStreamRef.current = null; }
+    screenCaptureActive.current = false;
+    setCamOn(false);
+    setScreenSharing(false);
+  }
+
+  async function toggleCam(){
+    if(!user || !joinedVoice) return;
+    if(camOn){
+      const cam = camStreamRef.current;
+      if(cam){ cam.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); camStreamRef.current = null; }
+      setCamOn(false);
+      replaceVideoTrackOnAllPeers(null);
+      return;
+    }
+    try{
+      const cam = await navigator.mediaDevices.getUserMedia({audio:false, video:{width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30}}});
+      camStreamRef.current = cam;
+      const vtr = cam.getVideoTracks()[0];
+      replaceVideoTrackOnAllPeers(vtr);
+      setCamOn(true);
+      setScreenSharing(false);
+    }catch(e:any){
+      setToast(e?.message?.includes("NotAllowed") ? "kamera izni gerekli" : "kamera: " + (e?.message||"hata"));
+    }
+  }
+
+  // Screen share with canvas re-encode at chosen resolution/fps
+  async function startScreenShare(){
+    if(!user || !joinedVoice) return;
+    setShowScreenPanel(false);
+    try{
+      const display = await navigator.mediaDevices.getDisplayMedia({
+        video: {width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:60}},
+        audio: false,
+      });
+      // stop previous cam stream so screen replaces it visually
+      if(camStreamRef.current){ camStreamRef.current.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); camStreamRef.current = null; }
+      setCamOn(false);
+
+      const vtr = display.getVideoTracks()[0];
+      const canvas = screenCanvasRef.current || document.createElement("canvas");
+      screenCanvasRef.current = canvas;
+      const ctx = canvas.getContext("2d")!;
+      const videoEl = document.createElement("video");
+      videoEl.srcObject = display;
+      videoEl.muted = true;
+      await videoEl.play().catch(()=>{});
+
+      const ctrl = new MediaStream();
+      let cap: MediaStream | null = null;
+      let capFps = 0;
+      let rafId = 0;
+      const settings = () => screenSettingsRef.current;
+
+      const stopCapture = () => {
+        if(cap){ cap.getTracks().forEach(t=>{try{t.stop();}catch{}}); cap = null; capFps = 0; }
+      };
+
+      const drawAndSend = () => {
+        if(!screenCaptureActive.current) return;
+        if(videoEl.videoWidth > 0 && videoEl.videoHeight > 0){
+          const s = settings();
+          canvas.width = s.w;
+          canvas.height = s.h;
+          const scale = Math.min(canvas.width / videoEl.videoWidth, canvas.height / videoEl.videoHeight);
+          const dw = videoEl.videoWidth * scale;
+          const dh = videoEl.videoHeight * scale;
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0,0,canvas.width,canvas.height);
+          ctx.drawImage(videoEl, (canvas.width-dw)/2, (canvas.height-dh)/2, dw, dh);
+          // rebuild capture if fps changed
+          if(cap && capFps !== s.fps){
+            stopCapture();
+          }
+          if(!cap){
+            cap = canvas.captureStream(s.fps);
+            capFps = s.fps;
+            ctrl.getTracks().forEach(t=>{try{t.stop();}catch{}});
+            cap.getVideoTracks().forEach(t=> ctrl.addTrack(t));
+            replaceVideoTrackOnAllPeers(ctrl.getVideoTracks()[0] || null);
+          }
+        }
+        rafId = requestAnimationFrame(drawAndSend);
+      };
+
+      screenStreamRef.current = display;
+      screenCaptureActive.current = true;
+      setScreenSharing(true);
+      rafId = requestAnimationFrame(drawAndSend);
+
+      // when the user stops sharing via browser UI
+      vtr.addEventListener("ended", ()=>{
+        screenCaptureActive.current = false;
+        cancelAnimationFrame(rafId);
+        stopCapture();
+        ctrl.getTracks().forEach(t=>{try{t.stop();}catch{}});
+        if(display){ display.getTracks().forEach(t=>{try{t.stop();}catch{}}); }
+        screenStreamRef.current = null;
+        replaceVideoTrackOnAllPeers(null);
+        setScreenSharing(false);
+      });
+    }catch(e:any){
+      setToast(e?.message?.includes("NotAllowed") ? "ekran paylaşımı izni gerekli" : "paylaşım: " + (e?.message||"hata"));
+    }
+  }
+
+  async function stopScreenShare(){
+    screenCaptureActive.current = false;
+    const scr = screenStreamRef.current;
+    if(scr){ scr.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); screenStreamRef.current = null; }
+    replaceVideoTrackOnAllPeers(null);
+    setScreenSharing(false);
+    setShowScreenPanel(false);
+  }
+
 
   async function joinViaInvite(){
     if(!joinCode.trim() || !user || joiningInvite) return;
@@ -1987,7 +2132,7 @@ export default function Home(){
                   <p>ses kanalı — katıl ve konuş.</p>
                   <div style={{marginTop:12, display:"flex", gap:8}}>
                     <button className="btn btn-primary" onClick={()=>setJoinedVoice(selectedChannel)}>KATIL</button>
-                    <button className="btn" onClick={()=>setJoinedVoice(null)}>AYRIL</button>
+                    <button className="btn" onClick={()=>{void hangUpVoice();}}>AYRIL</button>
                   </div>
                 </div>
               ) : filteredMessages.length===0 ? (
@@ -2662,7 +2807,7 @@ export default function Home(){
                     remove(ref(db,`channels/${selectedServer}`)).catch(()=>{});
                     remove(ref(db,`categories/${selectedServer}`)).catch(()=>{});
                     remove(ref(db,`attachments/${selectedServer}`)).catch(()=>{});
-                    if(joinedVoice) setJoinedVoice(null);
+                    if(joinedVoice) void hangUpVoice();
                     setSelectedServer("demo");
                     setSelectedChannel("general");
                     setToast("silindi"); setShowServerSettings(false);
@@ -2975,6 +3120,7 @@ export default function Home(){
           >
             <span className="icon"><Icon name={micMuted?"phoneOff":"phone"} size={20}/></span>
             {micMuted && <span className="pip-muted"><Icon name="micOff" size={10}/></span>}
+            {(camOn||screenSharing) && <span className="pip-cam"><Icon name="cam" size={9}/></span>}
           </div>
         ) : (
           <div className="call-overlay">
@@ -2988,24 +3134,60 @@ export default function Home(){
               </div>
               <div className="call-grid">
                 <div className={`call-card ${micMuted?"muted":""}`}>
-                  <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>
-                  <div className="call-name">Sen</div>
+                  <div className="call-video-box">
+                    {camOn && camStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && camStreamRef.current) el.srcObject = camStreamRef.current; }}/> : <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>}
+                  </div>
+                  <div className="call-name">Sen {screenSharing ? "— ekran paylaşımı" : ""}</div>
                   <div className="call-status"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={11}/></span> {micMuted ? "sessiz" : "konuşuyor"}</div>
                 </div>
                 {Object.entries(voiceParticipants).map(([uid, info])=>(
                   <div key={uid} className="call-card">
-                    <div className="call-avatar">{info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
+                    <div className="call-video-box">
+                      {remoteStreams[uid] && remoteStreams[uid].getVideoTracks().length > 0 ? (
+                        <video autoPlay playsInline ref={el=>{ if(el && remoteStreams[uid]) el.srcObject = remoteStreams[uid]; }}/>
+                      ) : (
+                        <div className="call-avatar">{info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
+                      )}
+                    </div>
                     <div className="call-name">{info.profile?.displayName || info.profile?.username || uid.slice(0,6)}</div>
-                    <div className="call-status"><span className="icon"><Icon name="mic" size={11}/></span> {remoteStreams[uid] ? "bağlı" : "bağlanıyor…"}</div>
+                    <div className="call-status"><span className="icon"><Icon name="mic" size={11}/></span> {remoteStreams[uid] ? (remoteStreams[uid].getVideoTracks().length > 0 ? "kamera + ses" : "bağlı") : "bağlanıyor…"}</div>
                   </div>
                 ))}
                 {Object.keys(voiceParticipants).length===0 && <div className="call-empty">başka kimse yok — davet et</div>}
               </div>
               <div className="call-controls">
                 <button className={micMuted?"active":""} onClick={()=>setMicMuted(v=>!v)} title="Mikrofonu aç/kapat"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={16}/></span></button>
+                <button className={camOn?"active":""} onClick={()=>{void toggleCam();}} title="Kamerayı aç/kapat"><span className="icon"><Icon name={camOn?"cam":"camOff"} size={16}/></span></button>
+                <button className={screenSharing?"active":""} onClick={()=>{ if(screenSharing){ void stopScreenShare(); } else { setShowScreenPanel(true); } }} title="Ekran paylaşımı"><span className="icon"><Icon name="screen" size={16}/></span></button>
                 <button className={deafen?"active":""} onClick={()=>setDeafen(v=>!v)} title="Sağır modu (karşı tarafın sesini kapat)"><span className="icon"><Icon name="phoneOff" size={16}/></span></button>
                 <button className="danger" onClick={()=>{void hangUpVoice();}} title="Aramayı bitir"><span className="icon"><Icon name="phoneOff" size={16}/></span> AYRIL</button>
               </div>
+              {screenSharing && (
+                <div style={{display:"flex", alignItems:"center", gap:8, justifyContent:"center", marginTop:10}}>
+                  <span style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>🖥 PAYLAŞIM — {screenSettings.w}×{screenSettings.h} @ {screenSettings.fps}fps</span>
+                  <button className="screen-settings-btn" onClick={()=>setShowScreenPanel(true)}>AYAR</button>
+                </div>
+              )}
+              {showScreenPanel && (
+                <div className="screen-panel">
+                  <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, marginBottom:10}}>EKRAN PAYLAŞIM AYARLARI</div>
+                  <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+                    <label style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>ÇÖZÜNÜRLÜK<select value={`${screenSettings.w}x${screenSettings.h}`} onChange={e=>{const [w,h]=e.target.value.split("x").map(Number); setScreenSettings(s=>({...s, w, h}));}} style={{width:"100%", background:"#000", color:"#fff", border:"1px solid var(--border)", padding:"6px", marginTop:4}}>
+                      <option value="1280x720">720p (1280×720)</option>
+                      <option value="1920x1080">1080p (1920×1080)</option>
+                    </select></label>
+                    <label style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>KARE HIZI (FPS)<select value={screenSettings.fps} onChange={e=>setScreenSettings(s=>({...s, fps:Number(e.target.value)}))} style={{width:"100%", background:"#000", color:"#fff", border:"1px solid var(--border)", padding:"6px", marginTop:4}}>
+                      <option value={15}>15 fps</option>
+                      <option value={30}>30 fps</option>
+                      <option value={60}>60 fps</option>
+                    </select></label>
+                  </div>
+                  <div style={{display:"flex", gap:8, justifyContent:"flex-end", marginTop:12}}>
+                    <button className="btn" onClick={()=>setShowScreenPanel(false)}>{screenSharing ? "İPTAL" : "VAZGEÇ"}</button>
+                    <button className="btn btn-primary" onClick={()=>{ if(screenSharing){ setShowScreenPanel(false); } else { setShowScreenPanel(false); void startScreenShare(); } }}>{screenSharing ? "UYGULA" : "PAYLAŞIMI BAŞLAT"}</button>
+                  </div>
+                </div>
+              )}
               <div className="call-audios">
                 {Object.entries(remoteStreams).map(([uid,stream])=>(<audio key={uid} autoPlay playsInline data-voice ref={el=>{if(el){el.srcObject=stream;el.volume=deafen?0:1;void el.play().catch(()=>{});}}}/>))}
               </div>
