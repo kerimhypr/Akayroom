@@ -305,6 +305,9 @@ export default function Home(){
   const [incomingServerInvites,setIncomingServerInvites]=useState<Record<string,{serverId:string, serverName:string, fromUid:string, fromName?:string, createdAt:number}>>({});
   const [inviteFriendTarget,setInviteFriendTarget]=useState<string|null>(null);
   const [inviteFriendServer,setInviteFriendServer]=useState<string>("");
+  const [showServerInviteMenu,setShowServerInviteMenu]=useState(false);
+  const [showServerFriendPicker,setShowServerFriendPicker]=useState(false);
+  const [serverFriendInvites,setServerFriendInvites]=useState<Record<string,boolean>>({});
   const [showMembers,setShowMembers]=useState(false);
   const [selectedProfileUid,setSelectedProfileUid]=useState<string|null>(null);
   const [selectedProfile,setSelectedProfile]=useState<UserProfile|null>(null);
@@ -2610,6 +2613,63 @@ export default function Home(){
         </div>
       )}
 
+      {showServerInviteMenu && (
+        <div className="modal-backdrop" onClick={()=>setShowServerInviteMenu(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{width:"min(420px,100%)"}}>
+            <div className="modal-head"><span>DAVET ET — {selectedServerData?.name || "SUNUCU"}</span><button onClick={()=>setShowServerInviteMenu(false)}>✕</button></div>
+            <div className="modal-body">
+              <button className="invite-method" onClick={()=>{ setShowServerInviteMenu(false); setShowInvite(true); }}>
+                <span className="invite-method-icon"><span className="icon"><Icon name="invite" size={16}/></span></span>
+                <span style={{flex:1, textAlign:"left"}}>
+                  <strong>KOD İLE DAVET ET</strong>
+                  <small>6 haneli kod üret — kodu olan herkes katılabilir, arkadaş olmayanlara da verebilirsin</small>
+                </span>
+                <span className="invite-method-arrow">→</span>
+              </button>
+              <button className="invite-method" onClick={()=>{ setShowServerInviteMenu(false); setServerFriendInvites({}); setShowServerFriendPicker(true); }}>
+                <span className="invite-method-icon"><span className="icon"><Icon name="users" size={16}/></span></span>
+                <span style={{flex:1, textAlign:"left"}}>
+                  <strong>ARKADAŞLARI DAVET ET</strong>
+                  <small>sadece arkadaşlarına doğrudan davet gönder — kabul edenler anında katılır</small>
+                </span>
+                <span className="invite-method-arrow">→</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showServerFriendPicker && (
+        <div className="modal-backdrop" onClick={()=>setShowServerFriendPicker(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{width:"min(440px,100%)"}}>
+            <div className="modal-head"><span>ARKADAŞLARI DAVET ET — {selectedServerData?.name}</span><button onClick={()=>setShowServerFriendPicker(false)}>✕</button></div>
+            <div className="modal-body">
+              {friends.length===0 ? (
+                <div className="invite-pick-hint">arkadaş listen boş — önce arkadaşlık isteği gönder</div>
+              ) : (
+                <div style={{display:"flex", flexDirection:"column", gap:6, maxHeight:"46vh", overflow:"auto"}}>
+                  {friends.map(f=>(
+                    <div key={f.uid} className="friend-row" style={{marginBottom:0}}>
+                      <span className="avatar" style={{border:"1px solid var(--border)", background:"#111", overflow:"hidden", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</span>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div data-friend-name style={{fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username||f.uid.slice(0,6)}</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
+                      </div>
+                      {serverFriendInvites[f.uid] ? (
+                        <span className="invited-mark">GÖNDERİLDİ ✓</span>
+                      ) : (
+                        <button className="btn btn-primary" style={{flex:"none"}} onClick={()=>{ void sendInviteToServer(f.uid, selectedServer); setServerFriendInvites(p=>({...p,[f.uid]:true})); }}>DAVET ET</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="invite-pick-hint" style={{marginTop:12}}>arkadaşın olmayan birini davet etmek için: davet et → kod ile davet et</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {inviteFriendTarget && (
         <div className="modal-backdrop" onClick={()=>setInviteFriendTarget(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -2902,7 +2962,7 @@ export default function Home(){
                 update(ref(db,`servers/${selectedServer}`),{name:e.target.value.trim()}); setToast("güncellendi");
               }} />
               <div style={{marginTop:14, display:"flex", gap:6}}>
-                <button className="btn" onClick={()=>setShowInvite(true)}>DAVET OLUŞTUR</button>
+                <button className="btn btn-primary" onClick={()=>setShowServerInviteMenu(true)}>DAVET ET</button>
                 <button className="btn btn-danger" onClick={()=>{
                   if(confirm("silinsin mi?")){
                     remove(ref(db,`servers/${selectedServer}`)).catch(()=>{});

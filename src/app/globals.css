@@ -552,14 +552,22 @@ html { scroll-behavior: smooth; }
 .tab.active { background:#fff; color:#000; border-color:#fff; }
 .tab:hover { border-color:#fff; color:#fff; }
 .tab.active:hover { color:#000; }
-.friend-row { display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--border); background: var(--surface-2); margin-bottom:6px; }
+.friend-row { display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--border); background: var(--surface-2); margin-bottom:6px; color:inherit; }
 .friend-row:hover { border-color:#333; }
 .friend-row > div:not(.avatar) { min-width:0; }
 .friend-row strong, .friend-row [data-friend-name] { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .friend-row .btn { flex:none; white-space:nowrap; }
-.invite-selected { border-color:#fff !important; }
+.invite-selected { border-color:#fff !important; background:#181818; }
+.invite-selected .invite-radio { color:#fff; }
 .invite-radio { font-size:14px; flex:none; color:var(--muted); }
 .invite-pick-hint { font-family:var(--font-mono); font-size:11px; color:var(--muted); margin-bottom:12px; }
+.invite-method { display:flex; align-items:center; gap:12px; width:100%; border:1px solid var(--border); background:var(--surface-2); padding:12px; margin-bottom:8px; color:inherit; text-align:left; transition:border-color .15s, background .15s; }
+.invite-method:hover { border-color:#fff; }
+.invite-method-icon { width:34px; height:34px; display:grid; place-items:center; border:1px solid var(--border); background:#000; color:#fff; flex:none; }
+.invite-method strong { display:block; font-size:13px; font-weight:700; }
+.invite-method small { display:block; font-family:var(--font-mono); font-size:10px; color:var(--muted); margin-top:3px; line-height:1.5; }
+.invite-method-arrow { color:var(--muted); flex:none; font-family:var(--font-mono); }
+.invited-mark { font-family:var(--font-mono); font-size:10px; font-weight:700; border:1px solid #fff; padding:4px 8px; flex:none; white-space:nowrap; }
 .friend-mini-btn { width:26px; height:26px; min-width:26px; border:1px solid var(--border); background:transparent; color:var(--muted); display:grid; place-items:center; cursor:pointer; flex:none; }
 .friend-mini-btn:hover { background:#fff; color:#000; }
 .avatar { width:36px; height:36px; border:0; background:#111; display:grid; place-items:center; font-family: var(--font-mono); font-size:11px; font-weight:700; position:relative; flex:0 0 auto; border-radius:50%; overflow:hidden; }
