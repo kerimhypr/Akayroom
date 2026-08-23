@@ -266,6 +266,28 @@ html { scroll-behavior: smooth; }
 .header-search input { background:transparent; border:0; color: var(--text); font-family: var(--font-mono); font-size:11px; width:140px; }
 .header-search input::placeholder { color: var(--dim); }
 
+/* DM arama sonuç paneli (Discord tarzı) */
+mark { background:#fff; color:#000; padding:0 2px; }
+.dm-search-panel { max-width:760px; margin:0 auto 14px; width:100%; border:1px solid #fff; background:#050505; display:flex; flex-direction:column; max-height:40vh; box-shadow:4px 4px 0 rgba(255,255,255,.08); }
+.dm-search-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 12px; border-bottom:1px solid var(--border); background:var(--surface-2); font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.dm-search-head span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dm-search-head button { flex:none; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:var(--font-mono); font-size:9px; font-weight:700; padding:3px 8px; letter-spacing:.06em; }
+.dm-search-head button:hover { border-color:#fff; color:#fff; }
+.dm-search-results { overflow:auto; }
+.dm-search-empty { padding:16px 12px; font-family:var(--font-mono); font-size:11px; color:var(--muted); text-align:center; border-bottom:1px solid var(--border); }
+.dm-search-item { display:flex; align-items:flex-start; gap:10px; width:100%; padding:10px 12px; border:0; border-bottom:1px solid var(--border); background:transparent; color:inherit; text-align:left; transition:background .12s; }
+.dm-search-item:hover { background:var(--surface-2); }
+.dm-search-item .avatar { width:30px; height:30px; font-size:10px; margin-top:2px; }
+.dm-search-meta { display:flex; align-items:baseline; gap:8px; }
+.dm-search-meta strong { font-size:12px; font-weight:700; }
+.dm-search-meta span { font-family:var(--font-mono); font-size:10px; color:var(--muted); }
+.dm-search-snippet { display:block; font-size:12px; color:var(--text-2); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dm-search-file { display:block; font-family:var(--font-mono); font-size:10px; color:var(--muted); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dm-search-jump { flex:none; font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:.06em; color:var(--dim); margin-top:4px; }
+.dm-search-item:hover .dm-search-jump { color:#fff; }
+.message-row.msg-flash { animation: msgFlash 1.8s ease-out; }
+@keyframes msgFlash { 0%,45% { background:rgba(255,255,255,.13); outline:1px solid rgba(255,255,255,.5); } 100% { background:transparent; outline:1px solid transparent; } }
+
 .message-area { flex:1; overflow:auto; padding:8px 0 0; position:relative; background: var(--panel); }
 .message-area .empty-state, .message-area .welcome { min-height:60%; }
 .message-row {

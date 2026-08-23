@@ -58,6 +58,15 @@ function attachmentKind(f: File): MessageAttachmentMeta["type"]{
 function fmtTime(ts: number) { try { return new Date(ts).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});} catch{ return "--:--"; } }
 function fmtDate(ts: number) { try{ return new Date(ts).toLocaleDateString("tr-TR",{day:"2-digit",month:"long",year:"numeric"});}catch{return "";} }
 
+function SearchHighlight({ text, q }: { text: string, q: string }){
+  const query = q.trim();
+  if(!query) return <>{text}</>;
+  const esc = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let parts: string[];
+  try{ parts = text.split(new RegExp(`(${esc})`, "ig")); }catch{ return <>{text}</>; }
+  return <>{parts.map((p,i)=> p.toLowerCase()===query.toLowerCase() ? <mark key={i}>{p}</mark> : <span key={i}>{p}</span>)}</>;
+}
+
 function Icon({name, size=14}: {name: string, size?: number}){
   const common = {width:size, height:size, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:1.7, strokeLinecap:"round" as const, strokeLinejoin:"round" as const};
   const paths: Record<string, React.ReactNode> = {
@@ -213,6 +222,7 @@ export default function Home(){
   const [editingId,setEditingId]=useState<string|null>(null);
   const [editContent,setEditContent]=useState("");
   const [search,setSearch]=useState("");
+  const [dmHighlightId,setDmHighlightId]=useState<string|null>(null);
   const [typingUsers,setTypingUsers]=useState<Record<string,{username:string,timestamp:number}>>({});
   const [showEmoji,setShowEmoji]=useState(false);
   const [showGif,setShowGif]=useState(false);
@@ -357,6 +367,17 @@ export default function Home(){
     const q=search.toLowerCase();
     return messages.filter(m=>m.content.toLowerCase().includes(q) || (m.authorName??"").toLowerCase().includes(q));
   },[messages,search]);
+  const dmSearchResults = useMemo(()=>{
+    if(!search.trim() || !selectedDm) return [];
+    const q=search.toLowerCase();
+    return dmMsgs.filter(m=> m.content?.toLowerCase().includes(q) || m.attachment?.name?.toLowerCase().includes(q));
+  },[dmMsgs,search,selectedDm]);
+
+  function jumpToDmMessage(id:string){
+    setDmHighlightId(id);
+    document.getElementById(`dm-msg-${id}`)?.scrollIntoView({behavior:"smooth", block:"center"});
+    window.setTimeout(()=>setDmHighlightId(cur=> cur===id ? null : cur), 1800);
+  }
 
   useEffect(()=>{
     if(!firebaseConfigured){ setAuthLoading(false); return; }
@@ -2111,12 +2132,42 @@ export default function Home(){
                   <div className="empty-state"><div className="empty-orb"><span className="icon"><Icon name="dm"/></span></div><h2>DM seç</h2><p>soldan bir kişi seç veya arkadaş ekle.</p></div>
                 ) : dmMsgs.length===0 ? (
                   <div className="empty-state"><div className="empty-orb">#</div><h2>henüz mesaj yok</h2><p>ilk mesajı gönder.</p></div>
-                ) : dmMsgs.filter(m=> !search || m.content.toLowerCase().includes(search.toLowerCase()) || m.attachment?.name.toLowerCase().includes(search.toLowerCase())).map(m=>(
-                  <div key={m.id} className={`message-row ${m.authorId===user.uid ? "" : ""}`} style={{maxWidth:760, margin:"0 auto", width:"100%"}}>
+                ) : (
+                  <>
+                    {search.trim() ? (
+                      <div className="dm-search-panel">
+                        <div className="dm-search-head">
+                          <span>{dmSearchResults.length} SONUÇ BULUNDU — &ldquo;{search.trim().slice(0,24)}{search.trim().length>24?"…":""}&rdquo;</span>
+                          <button onClick={()=>setSearch("")}>✕ TEMİZLE</button>
+                        </div>
+                        <div className="dm-search-results">
+                          {dmSearchResults.length===0 ? (
+                            <div className="dm-search-empty">bu sohbette eşleşen mesaj yok</div>
+                          ) : dmSearchResults.slice().reverse().map(m=>(
+                            <button key={m.id} className="dm-search-item" onClick={()=>jumpToDmMessage(m.id)}>
+                              <span className="avatar">{initials(m.authorId===user.uid ? (profile?.displayName||username) : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"??"))}</span>
+                              <span style={{flex:1, minWidth:0}}>
+                                <span className="dm-search-meta">
+                                  <strong>{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</strong>
+                                  <span>{fmtTime(m.createdAt)}</span>
+                                </span>
+                                {m.content && <span className="dm-search-snippet"><SearchHighlight text={m.content} q={search}/></span>}
+                                {m.attachment && <span className="dm-search-file">⎘ <SearchHighlight text={m.attachment.name} q={search}/> ({fmtSize(m.attachment.size)})</span>}
+                              </span>
+                              <span className="dm-search-jump">↓ MESAJA GİT</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {dmMsgs.map(m=>(
+                  <div key={m.id} id={`dm-msg-${m.id}`} className={`message-row ${dmHighlightId===m.id ? "msg-flash" : ""}`} style={{maxWidth:760, margin:"0 auto", width:"100%"}}>
                     <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorId===user.uid ? (profile?.displayName||username) : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"??"))}</button>
                     <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)} {m.editedAt?"(düzenlendi)":""}</span></div>{dmEditingId===m.id ? <div style={{display:"flex",gap:6}}><input value={dmEditContent} onChange={e=>setDmEditContent(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void saveDMEdit();if(e.key==="Escape")setDmEditingId(null)}} autoFocus style={{flex:1,background:"#000",border:"1px solid #fff",color:"#fff",padding:6}}/><button className="btn btn-primary" onClick={()=>void saveDMEdit()}>KAYDET</button><button className="btn" onClick={()=>setDmEditingId(null)}>İPTAL</button></div> : <><div className="msg-content">{m.content}</div>{m.attachment && (()=>{const c=dmAttachmentCache[m.id]; return c?.dataUrl ? (m.attachment.type==="image" ? <img src={c.dataUrl} alt={m.attachment.name} style={{marginTop:6,maxWidth:"100%",maxHeight:340,objectFit:"contain",display:"block"}}/> : m.attachment.type==="video" ? <video src={c.dataUrl} controls style={{marginTop:6,maxWidth:"100%",maxHeight:360,display:"block"}}/> : m.attachment.type==="audio" ? <audio src={c.dataUrl} controls style={{marginTop:6,width:"100%"}}/> : <a href={c.dataUrl} download={m.attachment.name} className="btn" style={{display:"inline-block",marginTop:6}}>⎘ {m.attachment.name}</a>) : <button className="btn" style={{marginTop:6}} onClick={()=>loadDmAttachment(m)} disabled={c?.loading}>{c?.loading?"yükleniyor…":`📎 ${m.attachment.name} (${fmtSize(m.attachment.size)}) — aç`}</button>;})()}</>} {m.authorId===user.uid && <div className="msg-actions"><button onClick={()=>{setDmEditingId(m.id);setDmEditContent(m.content)}}>✎</button><button onClick={()=>void deleteDMMessage(m.id)}>⌫</button></div>}</div>
                   </div>
-                ))}
+                    ))}
+                  </>
+                )}
               </div>
               {selectedDm && (
                 <div className="composer-wrap">
