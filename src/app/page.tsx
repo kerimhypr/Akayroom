@@ -725,13 +725,21 @@ export default function Home(){
             videoSendersRef.current[remoteUid] = sender;
           }
           pc.ontrack = (e)=>{
-            let stream = e.streams[0];
-            if(!stream){
-              // some browsers attach the track without a stream — wrap it
-              stream = new MediaStream();
-              stream.addTrack(e.track);
-            }
-            setRemoteStreams(prev=> ({...prev, [remoteUid]: stream}));
+            setRemoteStreams(prev=>{
+              const existing = prev[remoteUid];
+              if(existing){
+                // merge new track into the existing stream (audio & video arrive separately)
+                if(e.track && !existing.getTracks().some(t=>t.id===e.track.id)){
+                  existing.addTrack(e.track);
+                }
+                return prev;
+              }
+              const stream = e.streams[0] || new MediaStream();
+              if(e.track && !stream.getTracks().some(t=>t.id===e.track.id)){
+                stream.addTrack(e.track);
+              }
+              return {...prev, [remoteUid]: stream};
+            });
           };
           pc.onicecandidate = (e)=>{
             if(e.candidate) void publishCandidate(room, myUid, remoteUid, e.candidate);
@@ -3184,6 +3192,37 @@ export default function Home(){
                 <button className="call-min" onClick={()=>setCallPip(true)} title="Küçült"><span className="icon"><Icon name="minimize" size={14}/></span></button>
               </div>
               <div className="call-grid">
+                {(()=>{
+                  // Find an active video source to feature large on stage
+                  const remoteCamUid = Object.keys(voiceParticipants).find(uid=> remoteCamStatus[uid] && remoteStreams[uid]);
+                  const featured = remoteCamUid ? {uid:remoteCamUid, info:voiceParticipants[remoteCamUid], kind:remoteCamStatus[remoteCamUid]} : (camOn && camStreamRef.current ? {uid:user.uid, info:null, kind:"on" as const} : null);
+                  if(featured){
+                    const videoStream = featured.uid===user.uid ? camStreamRef.current : remoteStreams[featured.uid];
+                    return (
+                      <div className="call-stage">
+                        <video className="call-stage-video" ref={el=>{ if(el && videoStream){ el.srcObject = videoStream; void el.play().catch(()=>{}); } }} autoPlay playsInline />
+                        <div className="call-stage-bar">
+                          <span className="call-stage-name">● {featured.kind==="screen" ? "EKRAN PAYLAŞIMI" : featured.uid===user.uid ? "Sen — kamera" : (featured.info?.profile?.displayName || featured.info?.profile?.username || "Kamera")}</span>
+                          <span style={{marginLeft:"auto", display:"flex", gap:6}}>
+                            <button className="stage-btn" title="Tam ekran" onClick={(e)=>{ const v=e.currentTarget.parentElement?.parentElement?.querySelector("video"); if(v) void v.requestFullscreen().catch(()=>{}); }}>⛶</button>
+                            <button className="stage-btn" title="Ayrı pencerede aç (PIP)" onClick={(e)=>{ const v=e.currentTarget.parentElement?.parentElement?.querySelector("video") as HTMLVideoElement|null; if(v && (v as any).requestPictureInPicture) void (v as any).requestPictureInPicture().catch(()=>{}); }}>⧉</button>
+                          </span>
+                        </div>
+                        {Object.entries(voiceParticipants).filter(([uid])=> uid!==featured.uid).length>0 && (
+                          <div className="call-stage-mini">
+                            {Object.entries(voiceParticipants).filter(([uid])=> uid!==featured.uid).map(([uid, info])=>(
+                              <div key={uid} className="call-card mini">
+                                <div className="call-avatar">{info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
+                                <div className="call-name">{info.profile?.displayName || info.profile?.username || uid.slice(0,6)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <>
                 <div className={`call-card ${micMuted?"muted":""}`}>
                   <div className="call-video-box">
                     {camOn && camStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && camStreamRef.current) el.srcObject = camStreamRef.current; }}/> : <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>}
@@ -3204,7 +3243,10 @@ export default function Home(){
                     <div className="call-status"><span className="icon"><Icon name="mic" size={11}/></span> {remoteCamStatus[uid]==="screen" ? "ekran paylaşıyor" : remoteCamStatus[uid] ? "kamera açık" : remoteStreams[uid] ? "bağlı" : "bağlanıyor…"}</div>
                   </div>
                 ))}
-                {Object.keys(voiceParticipants).length===0 && <div className="call-empty">başka kimse yok — davet et</div>}
+                </>
+                  );
+                })()}
+                {Object.keys(voiceParticipants).length===0 && !camOn && <div className="call-empty">başka kimse yok — davet et</div>}
               </div>
               <div className="call-controls">
                 <button className={micMuted?"active":""} onClick={()=>setMicMuted(v=>!v)} title="Mikrofonu aç/kapat"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={16}/></span></button>
