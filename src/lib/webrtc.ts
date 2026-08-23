@@ -51,14 +51,15 @@ export function listenForCandidates(room: string, fromUid: string, toUid: string
 
 export function publishCandidate(room: string, fromUid: string, toUid: string, candidate: RTCIceCandidate) {
   const candidateRef = push(ref(db, `${room}/candidates/${fromUid}/${toUid}`));
-  return set(candidateRef, candidate.toJSON());
+  // ts: eski oturumlardan kalan candidate'ların dinleyicide yok sayılması için
+  return set(candidateRef, { ...candidate.toJSON(), ts: Date.now() });
 }
 
-export function publishOffer(room: string, fromUid: string, toUid: string, offer: RTCSessionDescriptionInit) {
+export function publishOffer(room: string, fromUid: string, toUid: string, offer: RTCSessionDescriptionInit & { ts?: number }) {
   return set(ref(db, `${room}/offers/${toUid}/${fromUid}`), offer);
 }
 
-export function publishAnswer(room: string, fromUid: string, toUid: string, answer: RTCSessionDescriptionInit) {
+export function publishAnswer(room: string, fromUid: string, toUid: string, answer: RTCSessionDescriptionInit & { ts?: number }) {
   return set(ref(db, `${room}/answers/${toUid}/${fromUid}`), answer);
 }
 

@@ -294,6 +294,7 @@ export default function Home(){
   const screenCaptureActive = useRef(false);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const videoSendersRef = useRef<Record<string, RTCRtpSender>>({});
+  const liveVideoTrackRef = useRef<MediaStreamTrack|null>(null);
   const mutedAvRef = useRef<{track: MediaStreamTrack, stream: MediaStream}|null>(null);
   const [remoteCamStatus,setRemoteCamStatus]=useState<Record<string,"on"|"screen">>({});
   const [pinnedIds,setPinnedIds]=useState<Set<string>>(new Set());
@@ -769,10 +770,15 @@ export default function Home(){
           }
         }
         unsubOffers = listenForOffers(room, myUid, async (fromUid, offer)=>{
+          // eski çağrılardan kalma (stale) offer'ları yut — ts yoksa veya 90sn'den eskiyse yok say
+          const o = offer as RTCSessionDescriptionInit & {ts?:number};
+          if(!o?.ts || Date.now()-o.ts > 90_000) return;
           if(pcsRef.current[fromUid]) return;
           await createPeer(fromUid, stream, false, offer);
         });
         unsubAnswers = listenForAnswers(room, myUid, async (fromUid, answer)=>{
+          const a = answer as RTCSessionDescriptionInit & {ts?:number};
+          if(!a?.ts || Date.now()-a.ts > 90_000) return;
           const pc = pcsRef.current[fromUid];
           if(pc && pc.signalingState !== "stable"){
             try{ await pc.setRemoteDescription(new RTCSessionDescription(answer)); }catch{}
@@ -789,29 +795,32 @@ export default function Home(){
           if(placeholder){
             const sender = pc.addTrack(placeholder.track, placeholder.stream);
             videoSendersRef.current[remoteUid] = sender;
+            // Görüşme ortasında peer yeniden kurulduysa (view değişimi/rejoin) şu an
+            // paylaşımda olan track'i hemen tak — yoksa karşı taraf siyah görür.
+            const live = liveVideoTrackRef.current;
+            if(live && live.readyState==="live"){ void sender.replaceTrack(live).catch(()=>{}); }
           }
           pc.ontrack = (e)=>{
             setRemoteStreams(prev=>{
+              // Her seferinde YENI MediaStream örneği üret → React re-render →
+              // <video>/<audio> ref'leri yeniden bağlanır ve play() tekrar denenir.
               const existing = prev[remoteUid];
-              if(existing){
-                // merge new track into the existing stream (audio & video arrive separately)
-                if(e.track && !existing.getTracks().some(t=>t.id===e.track.id)){
-                  existing.addTrack(e.track);
-                }
-                return prev;
-              }
-              const stream = e.streams[0] || new MediaStream();
-              if(e.track && !stream.getTracks().some(t=>t.id===e.track.id)){
-                stream.addTrack(e.track);
-              }
-              return {...prev, [remoteUid]: stream};
+              const tracks = existing ? Array.from(existing.getTracks()) : [];
+              const list = tracks.filter(t=>t.id!==e.track.id);
+              list.push(e.track);
+              return {...prev, [remoteUid]: new MediaStream(list)};
             });
           };
           pc.onicecandidate = (e)=>{
             if(e.candidate) void publishCandidate(room, myUid, remoteUid, e.candidate);
           };
-          const unsub = listenForCandidates(room, remoteUid, myUid, async (cand)=>{
-            try{ await pc.addIceCandidate(new RTCIceCandidate(cand)); }catch{}
+          const unsub = listenForCandidates(room, remoteUid, myUid, async (raw)=>{
+            const c = raw as RTCIceCandidateInit & {ts?:number};
+            if(!c?.ts || Date.now()-c.ts > 120_000) return; // stale candidate
+            try{
+              const {ts, ...init} = c;
+              await pc.addIceCandidate(new RTCIceCandidate(init as RTCIceCandidateInit));
+            }catch{}
           });
           candidateUnsubs.push(unsub);
           pc.onconnectionstatechange = ()=>{
@@ -824,12 +833,12 @@ export default function Home(){
               if(createOffer){
                 const offer = await pc.createOffer({offerToReceiveAudio:true, offerToReceiveVideo:true});
                 await pc.setLocalDescription(offer);
-                await publishOffer(room, myUid, remoteUid, offer);
+                await publishOffer(room, myUid, remoteUid, {...offer, ts: Date.now()});
               } else if(remoteOffer){
                 await pc.setRemoteDescription(new RTCSessionDescription(remoteOffer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                await publishAnswer(room, myUid, remoteUid, answer);
+                await publishAnswer(room, myUid, remoteUid, {...answer, ts: Date.now()});
               }
             }catch{}
           })();
@@ -848,6 +857,9 @@ export default function Home(){
       if(unsubOffers) unsubOffers();
       if(unsubAnswers) unsubAnswers();
       candidateUnsubs.forEach(fn=>{ try{fn();}catch{}});
+      // Ayrılırken kendi camStatus'umuzu temizle (karşı tarafta siyah kutu kalmasın)
+      void remove(ref(db, `${room}/camStatus/${myUid}`)).catch(()=>{});
+      liveVideoTrackRef.current = null;
       if(localStreamRef.current){
         localStreamRef.current.getTracks().forEach(tr=>tr.stop());
         localStreamRef.current = null;
@@ -1257,6 +1269,7 @@ export default function Home(){
     const scr = screenStreamRef.current;
     if(scr){ scr.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); screenStreamRef.current = null; }
     screenCaptureActive.current = false;
+    liveVideoTrackRef.current = null;
     setCamOn(false);
     setScreenSharing(false);
     setCamRemoteStatus(null);
@@ -1267,6 +1280,7 @@ export default function Home(){
     if(camOn){
       const cam = camStreamRef.current;
       if(cam){ cam.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); camStreamRef.current = null; }
+      if(liveVideoTrackRef.current && cam && cam.getTracks().includes(liveVideoTrackRef.current)) liveVideoTrackRef.current = null;
       setCamOn(false);
       setCamRemoteStatus(null);
       replaceVideoTrackOnAllPeers(null);
@@ -1276,6 +1290,7 @@ export default function Home(){
       const cam = await navigator.mediaDevices.getUserMedia({audio:false, video:{width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30}}});
       camStreamRef.current = cam;
       const vtr = cam.getVideoTracks()[0];
+      liveVideoTrackRef.current = vtr;
       replaceVideoTrackOnAllPeers(vtr);
       setCamOn(true);
       setScreenSharing(false);
@@ -1310,15 +1325,17 @@ export default function Home(){
       const ctrl = new MediaStream();
       let cap: MediaStream | null = null;
       let capFps = 0;
-      let rafId = 0;
+      let pumpTimer = 0;
       const settings = () => screenSettingsRef.current;
 
       const stopCapture = () => {
         if(cap){ cap.getTracks().forEach(t=>{try{t.stop();}catch{}}); cap = null; capFps = 0; }
       };
 
-      const drawAndSend = () => {
-        if(!screenCaptureActive.current) return;
+      // Tek kare çiz + gerekiyorda capture akışını kur. rAF yerine setTimeout
+      // zinciri kullanıyoruz: sekme arka plana geçince rAF tamamen durur ve
+      // karşı taraf donuk/siyah görür; setTimeout ise (kısıtlı da olsa) çalışmaya devam eder.
+      const drawOnce = () => {
         if(videoEl.videoWidth > 0 && videoEl.videoHeight > 0){
           const s = settings();
           canvas.width = s.w;
@@ -1338,26 +1355,34 @@ export default function Home(){
             capFps = s.fps;
             ctrl.getTracks().forEach(t=>{try{t.stop();}catch{}});
             cap.getVideoTracks().forEach(t=> ctrl.addTrack(t));
-            replaceVideoTrackOnAllPeers(ctrl.getVideoTracks()[0] || null);
+            const capTrack = cap.getVideoTracks()[0] || null;
+            liveVideoTrackRef.current = capTrack;
+            replaceVideoTrackOnAllPeers(capTrack);
           }
         }
-        rafId = requestAnimationFrame(drawAndSend);
+      };
+      const pump = () => {
+        if(!screenCaptureActive.current) return;
+        drawOnce();
+        const interval = Math.max(15, Math.floor(1000 / Math.max(1, settings().fps * 2)));
+        pumpTimer = window.setTimeout(pump, interval);
       };
 
       screenStreamRef.current = display;
       screenCaptureActive.current = true;
       setScreenSharing(true);
       setCamRemoteStatus("screen");
-      rafId = requestAnimationFrame(drawAndSend);
+      pump();
 
       // when the user stops sharing via browser UI
       vtr.addEventListener("ended", ()=>{
         screenCaptureActive.current = false;
-        cancelAnimationFrame(rafId);
+        window.clearTimeout(pumpTimer);
         stopCapture();
         ctrl.getTracks().forEach(t=>{try{t.stop();}catch{}});
         if(display){ display.getTracks().forEach(t=>{try{t.stop();}catch{}}); }
         screenStreamRef.current = null;
+        liveVideoTrackRef.current = null;
         replaceVideoTrackOnAllPeers(null);
         setScreenSharing(false);
         setCamRemoteStatus(null);
@@ -1371,6 +1396,7 @@ export default function Home(){
     screenCaptureActive.current = false;
     const scr = screenStreamRef.current;
     if(scr){ scr.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); screenStreamRef.current = null; }
+    liveVideoTrackRef.current = null;
     replaceVideoTrackOnAllPeers(null);
     setScreenSharing(false);
     setShowScreenPanel(false);

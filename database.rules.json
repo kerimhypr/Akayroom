@@ -263,6 +263,11 @@
             ".write": "auth != null && auth.uid === $uid && root.child('serverMembers').child(data.parent().parent().child('serverId').val()).child(auth.uid).exists()"
           }
         },
+        "camStatus": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        },
         "offers": {
           "$toUid": {
             "$fromUid": {
