@@ -3200,7 +3200,7 @@ export default function Home(){
                     const videoStream = featured.uid===user.uid ? camStreamRef.current : remoteStreams[featured.uid];
                     return (
                       <div className="call-stage">
-                        <video className="call-stage-video" ref={el=>{ if(el && videoStream){ el.srcObject = videoStream; void el.play().catch(()=>{}); } }} autoPlay playsInline />
+                        <video className="call-stage-video" muted autoPlay playsInline ref={el=>{ if(el && videoStream){ el.muted = true; el.srcObject = videoStream; void el.play().catch(()=>{}); } }} />
                         <div className="call-stage-bar">
                           <span className="call-stage-name">● {featured.kind==="screen" ? "EKRAN PAYLAŞIMI" : featured.uid===user.uid ? "Sen — kamera" : (featured.info?.profile?.displayName || featured.info?.profile?.username || "Kamera")}</span>
                           <span style={{marginLeft:"auto", display:"flex", gap:6}}>
@@ -3225,7 +3225,7 @@ export default function Home(){
                     <>
                 <div className={`call-card ${micMuted?"muted":""}`}>
                   <div className="call-video-box">
-                    {camOn && camStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && camStreamRef.current) el.srcObject = camStreamRef.current; }}/> : <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>}
+                    {camOn && camStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && camStreamRef.current){ el.muted = true; el.srcObject = camStreamRef.current; void el.play().catch(()=>{}); } }}/> : <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>}
                   </div>
                   <div className="call-name">Sen {screenSharing ? "— ekran paylaşımı" : ""}</div>
                   <div className="call-status"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={11}/></span> {micMuted ? "sessiz" : "konuşuyor"}</div>
@@ -3234,7 +3234,7 @@ export default function Home(){
                   <div key={uid} className="call-card">
                     <div className="call-video-box">
                       {remoteCamStatus[uid] && remoteStreams[uid] ? (
-                        <video autoPlay playsInline ref={el=>{ if(el && remoteStreams[uid]) el.srcObject = remoteStreams[uid]; }}/>
+                        <video autoPlay playsInline muted ref={el=>{ if(el && remoteStreams[uid]){ el.muted = true; el.srcObject = remoteStreams[uid]; void el.play().catch(()=>{}); } }}/>
                       ) : (
                         <div className="call-avatar">{info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
                       )}
