@@ -2606,7 +2606,7 @@ export default function Home(){
                   <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6))} placeholder="ABC123" autoFocus maxLength={6} />
                   <button className="btn btn-primary" onClick={async()=>{ if(!joinCode.trim())return; setJoiningInvite(true); setShowJoinInvite(false); await joinViaInvite(); setJoiningInvite(false); }} disabled={joiningInvite || joinCode.length!==6}>{joiningInvite ? "..." : "KATIL"}</button>
                 </div>
-                <button className="btn" onClick={()=>setShowCreateServer(true)} style={{alignSelf:"center", borderColor:"var(--border)", background:"transparent"}}>ya da yeni bir sunucu oluştur →</button>
+                <button className="btn" onClick={()=>{ setShowJoinInvite(false); setShowCreateServer(true); }} style={{alignSelf:"center", borderColor:"var(--border)", background:"transparent"}}>ya da yeni bir sunucu oluştur →</button>
               </div>
             </div>
           </div>
@@ -2962,7 +2962,7 @@ export default function Home(){
                 update(ref(db,`servers/${selectedServer}`),{name:e.target.value.trim()}); setToast("güncellendi");
               }} />
               <div style={{marginTop:14, display:"flex", gap:6}}>
-                <button className="btn btn-primary" onClick={()=>setShowServerInviteMenu(true)}>DAVET ET</button>
+                <button className="btn btn-primary" onClick={()=>{ setShowServerSettings(false); setShowServerInviteMenu(true); }}>DAVET ET</button>
                 <button className="btn btn-danger" onClick={()=>{
                   if(confirm("silinsin mi?")){
                     remove(ref(db,`servers/${selectedServer}`)).catch(()=>{});
