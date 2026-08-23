@@ -285,8 +285,10 @@ export default function Home(){
   const [dmAttachmentCache,setDmAttachmentCache]=useState<Record<string,{loading?:boolean,dataUrl?:string,error?:string}>>({});
   const [friends,setFriends]=useState<{uid:string, profile:UserProfile|null}[]>([]);
   const [friendRequests,setFriendRequests]=useState<Record<string,{fromName?:string, createdAt:number}>>({});
-  const [sentRequests,setSentRequests]=useState<Record<string, boolean>>({});
+  const [sentRequests,setSentRequests]=useState<Record<string, number>>({});
   const [incomingServerInvites,setIncomingServerInvites]=useState<Record<string,{serverId:string, serverName:string, fromUid:string, fromName?:string, createdAt:number}>>({});
+  const [inviteFriendTarget,setInviteFriendTarget]=useState<string|null>(null);
+  const [inviteFriendServer,setInviteFriendServer]=useState<string>("");
   const [showMembers,setShowMembers]=useState(false);
   const [selectedProfileUid,setSelectedProfileUid]=useState<string|null>(null);
   const [selectedProfile,setSelectedProfile]=useState<UserProfile|null>(null);
@@ -604,12 +606,15 @@ export default function Home(){
     });
   },[user]);
 
-  // Track my outgoing sent requests
+  // Track my outgoing sent requests (createdAt timestamps for cooldown)
   useEffect(()=>{
     if(!user) return;
     return onValue(ref(db,`friendRequests/${user.uid}/outgoing`),(snap)=>{
       if(!snap.exists()){ setSentRequests({}); return; }
-      setSentRequests(snap.val() as Record<string, boolean>);
+      const raw = snap.val() as Record<string, any>;
+      const asTs: Record<string, number> = {};
+      Object.entries(raw).forEach(([k, v])=>{ asTs[k] = typeof v==="number" ? v : (v?.createdAt || Date.now()); });
+      setSentRequests(asTs);
     });
   },[user]);
 
@@ -1112,6 +1117,7 @@ export default function Home(){
       if(!snap.exists()){ setToast("davet bulunamadı"); return; }
       const inv=snap.val() as any;
       await set(ref(db,`serverMembers/${inv.serverId}/${user.uid}`),{role:"member",joinedAt: serverTimestamp()});
+      await set(ref(db,`users/${user.uid}/servers/${inv.serverId}`), true);
       setSelectedServer(inv.serverId);
       setActiveView("server");
       setToast("katıldın");
@@ -1130,10 +1136,19 @@ export default function Home(){
     if(!user) return;
     if(targetUid===user.uid){ setToast("kendine istek atamazsın"); return; }
     if(friends.some(f=>f.uid===targetUid)){ setToast("zaten arkadaşsınız"); return; }
+    const COOLDOWN = 30_000; // 30s
+    const lastTs = sentRequests[targetUid] || 0;
+    if(lastTs && Date.now() - lastTs < COOLDOWN){
+      const left = Math.ceil((COOLDOWN - (Date.now()-lastTs))/1000);
+      setToast(`bekleyen istek var — ${left} sn sonra tekrar atabilirsin`);
+      return;
+    }
     const myName = profile?.displayName || profile?.username || username || "biri";
     try{
+      // remove any stale invite on their side first, then send the fresh one
+      await remove(ref(db,`friendRequests/${targetUid}/incoming/${user.uid}`)).catch(()=>{});
       await set(ref(db,`friendRequests/${targetUid}/incoming/${user.uid}`), {fromName: myName, createdAt: Date.now()});
-      await set(ref(db,`friendRequests/${user.uid}/outgoing/${targetUid}`), true);
+      await set(ref(db,`friendRequests/${user.uid}/outgoing/${targetUid}`), {createdAt: Date.now()});
       setToast(`istek gönderildi → ${targetName}`);
     }catch(e){ setToast("istek gönderilemedi"); }
   }
@@ -1144,6 +1159,7 @@ export default function Home(){
       await set(ref(db,`friends/${user.uid}/${fromUid}`), true);
       await set(ref(db,`friends/${fromUid}/${user.uid}`), true);
       await remove(ref(db,`friendRequests/${user.uid}/incoming/${fromUid}`));
+      await remove(ref(db,`friendRequests/${fromUid}/outgoing/${user.uid}`));
       await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"accepted", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
       setToast("arkadaş oldun ✓");
     }catch{ setToast("işlem başarısız"); }
@@ -1153,6 +1169,7 @@ export default function Home(){
     if(!user) return;
     try{
       await remove(ref(db,`friendRequests/${user.uid}/incoming/${fromUid}`));
+      await remove(ref(db,`friendRequests/${fromUid}/outgoing/${user.uid}`));
       await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"rejected", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
       setToast("istek reddedildi");
     }catch{ setToast("işlem başarısız"); }
@@ -1179,15 +1196,25 @@ export default function Home(){
   }
 
   async function inviteFriendToServer(friendUid: string){
-    if(!user || selectedServer==="demo"){ setToast("önce bir sunucu seç"); return; }
+    if(!user) return;
+    const mine = servers.filter(s=>s.id!=="demo" && myServerIds[s.id]);
+    if(mine.length===0){ setToast("önce bir sunucu kur veya bir sunucuya katıl"); return; }
+    setInviteFriendTarget(friendUid);
+    setInviteFriendServer(mine[0].id);
+  }
+
+  async function sendInviteToServer(friendUid: string, serverId: string){
+    if(!user || !serverId) return;
     try{
+      const server = servers.find(s=>s.id===serverId);
       await set(ref(db,`serverInvites/${friendUid}/${Date.now()}`), {
-        serverId: selectedServer,
-        serverName: selectedServerData?.name || "bir sunucu",
+        serverId,
+        serverName: server?.name || "bir sunucu",
         fromUid: user.uid,
         fromName: profile?.displayName || username || "biri",
         createdAt: Date.now(),
       });
+      setInviteFriendTarget(null);
       setToast("sunucu daveti gönderildi");
     }catch{ setToast("davet gönderilemedi"); }
   }
@@ -1197,6 +1224,7 @@ export default function Home(){
     try{
       const {serverId} = inv;
       await set(ref(db,`serverMembers/${serverId}/${user.uid}`), {role:"member", joinedAt: serverTimestamp()});
+      await set(ref(db,`users/${user.uid}/servers/${serverId}`), true);
       await remove(ref(db,`serverInvites/${user.uid}/${inviteId}`));
       setSelectedServer(serverId);
       setActiveView("server");
@@ -1662,14 +1690,14 @@ export default function Home(){
                     </div>
                   ) : friends.map(f=>(
                     <div key={f.uid} className="friend-row">
-                      <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                      <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
                       <div style={{flex:1, minWidth:0}}>
-                        <div style={{fontSize:13, fontWeight:600}}>{f.profile?.displayName||f.profile?.username}</div>
-                        <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>@{f.profile?.username}</div>
+                        <div data-friend-name style={{fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username}</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
                       </div>
-                      <button className="btn" onClick={()=>startDM(f.uid)}>DM</button>
-                      <button className="btn" onClick={()=>void inviteFriendToServer(f.uid)} title="Seçili sunucuya davet et">DAVET</button>
-                      <button className="btn" style={{color:"#ff4444"}} onClick={()=>void removeFriend(f.uid)} title="Arkadaşlıktan çıkar">ÇIKAR</button>
+                      <button className="friend-mini-btn" title="Mesaj" onClick={()=>startDM(f.uid)}><span className="icon"><Icon name="dm" size={12}/></span></button>
+                      <button className="friend-mini-btn" title="Sunucuya davet et" onClick={()=>void inviteFriendToServer(f.uid)}><span className="icon"><Icon name="invite" size={12}/></span></button>
+                      <button className="friend-mini-btn" style={{color:"#ff4444"}} title="Arkadaşlıktan çıkar" onClick={()=>void removeFriend(f.uid)}>✕</button>
                     </div>
                   ))}
                 </>
@@ -1867,11 +1895,14 @@ export default function Home(){
                   <div style={{maxWidth:560, margin:"0 auto", width:"100%"}}>
                     {friends.map(f=>(
                       <div key={f.uid} className="friend-row">
-                        <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
-                        <div style={{flex:1}}><div style={{fontWeight:600}}>{f.profile?.displayName||f.profile?.username}</div><div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>@{f.profile?.username}</div></div>
-                         <button className="btn" onClick={()=>startDM(f.uid)}>MESAJ</button>
-                         <button className="btn" onClick={()=>void inviteFriendToServer(f.uid)} title="Seçili sunucuya davet et">DAVET</button>
-                         <button className="btn" style={{color:"#ff4444"}} onClick={()=>void removeFriend(f.uid)} title="Arkadaşlıktan çıkar">ÇIKAR</button>
+                        <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                        <div style={{flex:1, minWidth:0}}>
+                          <div data-friend-name style={{fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username}</div>
+                          <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
+                        </div>
+                        <button className="btn" onClick={()=>startDM(f.uid)}>MESAJ</button>
+                        <button className="btn" onClick={()=>void inviteFriendToServer(f.uid)} title="Sunucuya davet et">DAVET</button>
+                        <button className="btn" style={{color:"#ff4444"}} onClick={()=>void removeFriend(f.uid)} title="Arkadaşlıktan çıkar">ÇIKAR</button>
                       </div>
                     ))}
                   </div>
@@ -2326,6 +2357,30 @@ export default function Home(){
                 </div>
                 <button className="btn" onClick={()=>setShowCreateServer(true)} style={{alignSelf:"center", borderColor:"var(--border)", background:"transparent"}}>ya da yeni bir sunucu oluştur →</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inviteFriendTarget && (
+        <div className="modal-backdrop" onClick={()=>setInviteFriendTarget(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-head"><span>SUNUCUYA DAVET ET</span><button onClick={()=>setInviteFriendTarget(null)}>✕</button></div>
+            <div className="modal-body">
+              <div className="invite-pick-hint">davet edeceğin sunucuyu seç — arkadaşın daveti kabul ettiğinde doğrudan o sunucuya katılır</div>
+              <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).map(s=>(
+                  <button key={s.id} className={`friend-row ${inviteFriendServer===s.id?"invite-selected":""}`} onClick={()=>setInviteFriendServer(s.id)} style={{cursor:"pointer", width:"100%", textAlign:"left"}}>
+                    <span className="avatar" style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", overflow:"hidden"}}>{s.iconUrl ? <img src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(s.name)}</span>
+                    <span style={{flex:1, fontWeight:600, fontSize:13}}>{s.name}</span>
+                    <span className="invite-radio">{inviteFriendServer===s.id ? "◉" : "○"}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn" onClick={()=>setInviteFriendTarget(null)}>İPTAL</button>
+              <button className="btn btn-primary" onClick={()=>void sendInviteToServer(inviteFriendTarget, inviteFriendServer)} disabled={!inviteFriendServer}>DAVET GÖNDER</button>
             </div>
           </div>
         </div>

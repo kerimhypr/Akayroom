@@ -554,6 +554,14 @@ html { scroll-behavior: smooth; }
 .tab.active:hover { color:#000; }
 .friend-row { display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--border); background: var(--surface-2); margin-bottom:6px; }
 .friend-row:hover { border-color:#333; }
+.friend-row > div:not(.avatar) { min-width:0; }
+.friend-row strong, .friend-row [data-friend-name] { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.friend-row .btn { flex:none; white-space:nowrap; }
+.invite-selected { border-color:#fff !important; }
+.invite-radio { font-size:14px; flex:none; color:var(--muted); }
+.invite-pick-hint { font-family:var(--font-mono); font-size:11px; color:var(--muted); margin-bottom:12px; }
+.friend-mini-btn { width:26px; height:26px; min-width:26px; border:1px solid var(--border); background:transparent; color:var(--muted); display:grid; place-items:center; cursor:pointer; flex:none; }
+.friend-mini-btn:hover { background:#fff; color:#000; }
 .avatar { width:36px; height:36px; border:0; background:#111; display:grid; place-items:center; font-family: var(--font-mono); font-size:11px; font-weight:700; position:relative; flex:0 0 auto; border-radius:50%; overflow:hidden; }
 .avatar.small { width:28px; height:28px; font-size:9px; }
 .avatar i { position:absolute; right:-1px; bottom:-1px; width:10px; height:10px; border:2px solid var(--surface-2); border-radius:50%; background:#555; }
