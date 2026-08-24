@@ -20,6 +20,7 @@ import {
   query,
   ref,
   remove,
+  runTransaction,
   serverTimestamp,
   set,
   startAt,
@@ -1520,9 +1521,20 @@ export default function Home(){
       const inv=snap.val() as any;
       if(inv.expiresAt && Date.now() > inv.expiresAt){ setToast("davet süresi dolmuş"); return; }
       if(inv.maxUses && (inv.uses||0) >= inv.maxUses){ setToast("davet kullanım limiti doldu"); return; }
+      // uses'ı transaction ile atomik artır (race kapatıldı) — önce daveti kilitle
+      let canJoin=true;
+      try{
+        const tx:any = await runTransaction(ref(db,`invites/${code}`), (curr:any)=>{
+          if(curr===null) return;
+          if(curr.expiresAt && Date.now() > curr.expiresAt) return;
+          if(curr.maxUses && (curr.uses||0) >= curr.maxUses) return;
+          return {...curr, uses: (curr.uses||0)+1};
+        });
+        if(tx && typeof tx.committed === "boolean" && !tx.committed) canJoin=false;
+      }catch{ canJoin=false; }
+      if(!canJoin){ setToast("davet kullanım limiti doldu veya süresi doldu"); return; }
       await set(ref(db,`serverMembers/${inv.serverId}/${user.uid}`),{role:"member",joinedAt: serverTimestamp()});
       await set(ref(db,`users/${user.uid}/servers/${inv.serverId}`), true);
-      try{ await update(ref(db,`invites/${code}`),{uses: (inv.uses||0)+1}); }catch{}
       setSelectedServer(inv.serverId);
       setActiveView("server");
       setToast("katıldın");
