@@ -25,7 +25,7 @@
 }
 
 * { box-sizing: border-box; }
-*::selection { background: #fff; color: #000; }
+*::selection { background: var(--accent); color: var(--accent-fg); }
 html { scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #222 transparent; }
 html,body { margin:0; min-height:100%; background:var(--bg); color:var(--text); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 button,input,textarea,select { font: inherit; }
@@ -130,7 +130,7 @@ html { scroll-behavior: smooth; }
   overflow-y:auto; overflow-x:hidden;
 }
 .brand-mark {
-  width:48px; height:48px; border:1px solid #fff; border-radius:12px;
+  width:48px; height:48px; border:1px solid #fff; border-radius:0;
   display:grid; place-items:center;
   font-family: var(--font-mono); font-weight:800; font-size:11px; letter-spacing:.06em;
   background:#fff; color:#000; line-height:1;
@@ -139,7 +139,7 @@ html { scroll-behavior: smooth; }
 .rail-divider { width:32px; height:1px; background: var(--border); margin:4px 0; }
 .rail-label { font-family: var(--font-mono); font-size:9px; letter-spacing:.1em; color: var(--dim); text-transform:uppercase; margin:6px 0 2px; }
 .server-icon {
-  width:48px; height:48px; border:1px solid var(--border); border-radius:12px;
+  width:48px; height:48px; border:1px solid var(--border); border-radius:0;
   background: var(--surface-2); color: var(--text-2);
   display:grid; place-items:center; font-family: var(--font-mono); font-weight:700; font-size:12px;
   position:relative; transition: border-color .15s, background .15s, color .15s, opacity .15s; overflow:hidden; flex:0 0 auto;
@@ -153,8 +153,8 @@ html { scroll-behavior: smooth; }
 .server-icon img { width:100%; height:100%; object-fit:cover; }
 .server-icon.add, .server-icon.discover { background: transparent; border-style: dashed; color: var(--muted); font-size:18px; }
 .server-icon.add:hover, .server-icon.discover:hover { border-color:#fff; background:#fff; color:#000; }
-.server-icon.dm { border-radius:12px; }
-.server-icon.dm.active { border-radius:12px; }
+.server-icon.dm { border-radius:0; }
+.server-icon.dm.active { border-radius:0; }
 
 /* --- CHANNEL SIDEBAR --- */
 .channel-sidebar { /* fluid */
@@ -552,7 +552,7 @@ mark { background:#fff; color:#000; padding:0 2px; }
 
 /* Command palette */
 .palette-backdrop { position:fixed; inset:0; background: rgba(0,0,0,.6); z-index:65; display:grid; place-items:start center; padding-top:12vh; }
-.palette { width:min(640px, calc(100% - 32px)); background: var(--surface); border:1px solid #fff; box-shadow: 6px 6px 0 rgba(255,255,255,.12); overflow:hidden; }
+.palette { width:min(640px, calc(100% - 32px)); background: var(--surface); border:1px solid #fff; box-shadow: 4px 4px 0 rgba(255,255,255,.12); overflow:hidden; }
 .palette-input { display:flex; align-items:center; gap:10px; padding:12px; border-bottom:1px solid var(--border); }
 .palette-input span { font-family: var(--font-mono); color: var(--muted); }
 .palette-input input { flex:1; background:transparent; border:0; color:#fff; font-family: var(--font-mono); font-size:13px; }
@@ -625,7 +625,7 @@ mark { background:#fff; color:#000; padding:0 2px; }
 
 /* Call overlay */
 .call-overlay { position:fixed; inset:0; background: rgba(0,0,0,.78); backdrop-filter: blur(2px); z-index:90; display:flex; align-items:center; justify-content:center; padding:16px; }
-.call-window { background: var(--surface); border:1px solid #fff; max-width:420px; width:100%; padding:14px; box-shadow: 6px 6px 0 rgba(255,255,255,.12); animation: slideDown .18s ease-out both; }
+.call-window { background: var(--surface); border:1px solid #fff; max-width:420px; width:100%; padding:14px; box-shadow: 4px 4px 0 rgba(255,255,255,.12); animation: slideDown .18s ease-out both; }
 .call-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
 .call-title { font-family: var(--font-mono); font-size:13px; font-weight:700; letter-spacing:.04em; }
 .call-min { border:1px solid var(--border); background:transparent; color:var(--muted); width:28px; height:28px; display:grid; place-items:center; cursor:pointer; flex:none; }

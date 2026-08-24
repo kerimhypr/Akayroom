@@ -349,6 +349,11 @@ export default function Home(){
   const messagesEndRef=useRef<HTMLDivElement>(null);
   const typingTimeout=useRef<NodeJS.Timeout | null>(null);
   const composerRef=useRef<HTMLTextAreaElement>(null);
+  useEffect(()=>{ return ()=>{ if(typingTimeout.current) clearTimeout(typingTimeout.current); } },[selectedChannel]);
+  const doSignOut=async()=>{
+    try{ if(user) { await remove(ref(db,`users/${user.uid}/presence/connections`)).catch(()=>{}); await set(ref(db,`users/${user.uid}/presence/status`),"offline").catch(()=>{}); } }catch{}
+    await signOut(auth);
+  };
 
   const selectedServerData = useMemo(()=> servers.find(s=>s.id===selectedServer) ?? servers[0],[servers,selectedServer]);
   const selectedChannelData = useMemo(()=> channels.find(c=>c.id===selectedChannel) ?? channels[0],[channels,selectedChannel]);
@@ -398,9 +403,11 @@ export default function Home(){
       const snap=await get(ref(db,`users/${u.uid}/public`));
       if(snap.exists()) setProfile(snap.val());
       const presRef=ref(db,`users/${u.uid}/presence`);
-      set(presRef,{status:"online",lastChanged:Date.now(),connections:{[Date.now()]:true}}).catch(()=>{});
+      const connId=Date.now().toString();
+      set(presRef,{status:"online",lastChanged:Date.now(),connections:{[connId]:true}}).catch(()=>{});
       onDisconnect(ref(db,`users/${u.uid}/presence/status`)).set("offline").catch(()=>{});
       onDisconnect(ref(db,`users/${u.uid}/presence/lastChanged`)).set(Date.now()).catch(()=>{});
+      onDisconnect(ref(db,`users/${u.uid}/presence/connections/${connId}`)).remove().catch(()=>{});
     });
   },[]);
 
@@ -667,15 +674,15 @@ export default function Home(){
 
   useEffect(()=>{
     if(!user) return;
-    return onValue(ref(db,`friends/${user.uid}`), async (snap)=>{
+    return onValue(ref(db,`friends/${user.uid}`), (snap)=>{
       if(!snap.exists()){ setFriends([]); return; }
       const ids = Object.keys(snap.val() as Record<string,any>);
-      const next: {uid:string, profile:UserProfile|null}[] = [];
-      for(const fid of ids){
-        const psnap = await get(ref(db,`users/${fid}/public`));
-        next.push({uid:fid, profile: psnap.exists()? psnap.val(): null});
-      }
-      setFriends(next);
+      void Promise.all(ids.map(async fid=>{
+        try{
+          const psnap = await get(ref(db,`users/${fid}/public`));
+          return {uid:fid, profile: psnap.exists()? psnap.val() as UserProfile: null};
+        }catch{ return {uid:fid, profile:null}; }
+      })).then(next=> setFriends(next));
     });
   },[user]);
 
@@ -1740,7 +1747,14 @@ export default function Home(){
 
   async function createInvite(){
     if(!user || selectedServer==="demo") return;
-    const code=Math.random().toString(36).slice(2,8).toUpperCase();
+    const charset="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const gen=()=> Array.from(crypto.getRandomValues(new Uint8Array(6)), b=>charset[b%charset.length]).join('');
+    let code=gen(); let tries=0;
+    while(tries<3){
+      const snap=await get(ref(db,`invites/${code}`));
+      if(!snap.exists()) break;
+      code=gen(); tries++;
+    }
     await set(ref(db,`invites/${code}`),{serverId:selectedServer, createdBy:user.uid, createdAt:Date.now(), uses:0});
     setInviteCode(code); setToast(`davet: ${code}`);
   }
@@ -2593,7 +2607,8 @@ export default function Home(){
                       <button className="btn" onClick={()=>setPollOpts(p=>[...p,""])}>+ SEÇENEK</button>
                       <button className="btn btn-primary" onClick={()=>{
                         if(!pollQ.trim() || pollOpts.filter(s=>s.trim()).length<2){ setToast("en az 2 seçenek"); return; }
-                        const poll={id: Math.random().toString(36).slice(2,8), question: pollQ.trim(), options: pollOpts.filter(s=>s.trim()).map((t,i)=>({id:i.toString(), text:t.trim(), votes:0})), totalVotes:0, allowMultiple:false};
+                        const charset="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; const gen=()=> Array.from(crypto.getRandomValues(new Uint8Array(8)), b=>charset[b%charset.length]).join('').slice(0,8);
+                        const poll={id: gen(), question: pollQ.trim(), options: pollOpts.filter(s=>s.trim()).map((t,i)=>({id:i.toString(), text:t.trim(), votes:0})), totalVotes:0, allowMultiple:false};
                         const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
                         set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, content: poll.question, authorName: profile?.displayName??username, createdAt: serverTimestamp(), poll});
                         setPollQ(""); setPollOpts(["",""]); setShowPoll(false);
@@ -2982,7 +2997,7 @@ export default function Home(){
                   });
                   setToast("profil güncellendi"); setShowUserSettings(false);
                 }}>KAYDET</button>
-                <button className="btn" onClick={()=>signOut(auth)}>ÇIKIŞ</button>
+                <button className="btn" onClick={()=>void doSignOut()}>ÇIKIŞ</button>
                 <button className="btn" onClick={()=>setShowUserSettings(false)} style={{marginLeft:"auto"}}>KAPAT</button>
               </div>
             </div>
@@ -3008,7 +3023,7 @@ export default function Home(){
               <div style={{marginTop:"auto", borderTop:"1px solid var(--border)", paddingTop:8}}>
                 <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:"4px 8px"}}>{profile?.displayName}</div>
                 <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--dim)", padding:"0 8px"}}>@{profile?.username}</div>
-                <button className="btn btn-danger" onClick={()=>signOut(auth)} style={{width:"100%", marginTop:8, fontSize:10}}>ÇIKIŞ YAP</button>
+                <button className="btn btn-danger" onClick={()=>void doSignOut()} style={{width:"100%", marginTop:8, fontSize:10}}>ÇIKIŞ YAP</button>
               </div>
             </div>
             <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0, background:"var(--surface)"}}>
@@ -3094,7 +3109,7 @@ export default function Home(){
                     <div style={{border:"1px solid #ff5c70", background:"#190006", padding:16}}>
                       <div style={{fontFamily:"var(--font-mono)", fontSize:12, fontWeight:700, color:"#ff9baf"}}>OTURUMU KAPAT</div>
                       <div style={{fontSize:12, color:"#ffb7c3", marginTop:8}}>Bu cihazdaki Akayroom oturumun kapatılır. Hesabın ve sunucuların silinmez.</div>
-                      <button className="btn btn-danger" onClick={()=>signOut(auth)} style={{marginTop:14, borderColor:"#ff9baf", color:"#ff9baf"}}>ÇIKIŞ YAP</button>
+                      <button className="btn btn-danger" onClick={()=>void doSignOut()} style={{marginTop:14, borderColor:"#ff9baf", color:"#ff9baf"}}>ÇIKIŞ YAP</button>
                     </div>
                     <div style={{border:"1px dashed var(--border)", padding:12, fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>Hesabı kalıcı silmek için Hesabım sekmesindeki Hesabı Sil alanını kullan.</div>
                   </div>
