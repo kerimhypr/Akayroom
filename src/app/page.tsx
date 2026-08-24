@@ -89,6 +89,8 @@ function Icon({name, size=14}: {name: string, size?: number}){
     phone: <><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.64.29 1.27.5 1.87a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.6.21 1.23.38 1.87.5A2 2 0 0 1 22 16.92z"/></>,
     phoneOff: <><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" x2="2" y1="2" y2="22"/></>,
     minimize: <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>,
+    maximize: <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>,
+    pip: <><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><rect x="10" y="8" width="8" height="6" rx="1"/><line x1="14" y1="10" x2="14" y2="12"/></>,
     cam: <><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>,
     camOff: <><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/><line x1="1" x2="23" y1="1" y2="23"/></>,
     screen: <><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>,
@@ -322,6 +324,7 @@ export default function Home(){
   const [showServerFriendPicker,setShowServerFriendPicker]=useState(false);
   const [serverFriendInvites,setServerFriendInvites]=useState<Record<string,boolean>>({});
   const [showMembers,setShowMembers]=useState(false);
+  const [mobileSidebarOpen,setMobileSidebarOpen]=useState(false);
   const [selectedProfileUid,setSelectedProfileUid]=useState<string|null>(null);
   const [selectedProfile,setSelectedProfile]=useState<UserProfile|null>(null);
   const [profileLoading,setProfileLoading]=useState(false);
@@ -461,7 +464,8 @@ export default function Home(){
   useEffect(()=>{
     if(!user || selectedServer==="demo") return;
     if(activeView!=="server") return;
-    return onValue(ref(db,`typing/${selectedServer}/${selectedChannel}`),(snap)=>{
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const unsub = onValue(ref(db,`typing/${selectedServer}/${selectedChannel}`),(snap)=>{
       if(!snap.exists()){ setTypingUsers({}); return; }
       const v=snap.val() as Record<string,{username:string,timestamp:number}>;
       const now=Date.now();
@@ -473,22 +477,50 @@ export default function Home(){
       });
       setTypingUsers(filtered);
     });
+    timer = setInterval(()=>{
+      setTypingUsers(prev=>{
+        const now=Date.now();
+        let changed=false;
+        const next: typeof prev = {};
+        Object.entries(prev).forEach(([uid,data])=>{
+          if(now - data.timestamp <= 7000){ next[uid]=data; } else { changed=true; }
+        });
+        return changed ? next : prev;
+      });
+    }, 2000);
+    return ()=>{ try{unsub();}catch{} if(timer) clearInterval(timer); };
   },[user,selectedServer,selectedChannel,activeView]);
 
   useEffect(()=>{
     if(!user || selectedServer==="demo") { setMembers([]); return; }
-    return onValue(ref(db,`serverMembers/${selectedServer}`), async (snap)=>{
+    let stale=false;
+    const unsub = onValue(ref(db,`serverMembers/${selectedServer}`), (snap)=>{
+      if(stale) return;
       if(!snap.exists()){ setMembers([]); return; }
       const entries = Object.entries(snap.val() as Record<string,any>);
-      const next: {uid:string, profile:UserProfile|null, role:string}[] = [];
-      for(const [uid, val] of entries){
+      const snapId = JSON.stringify(Object.keys(snap.val()).sort());
+      void (async ()=>{
         try{
-          const profSnap = await get(ref(db,`users/${uid}/public`));
-          next.push({uid, profile: profSnap.exists()? profSnap.val() : null, role: (val as any).role || "member"});
-        }catch{ next.push({uid, profile:null, role:(val as any).role || "member"});}
-      }
-      setMembers(next);
+          const results = await Promise.all(entries.map(async ([uid, val])=>{
+            try{
+              const profSnap = await get(ref(db,`users/${uid}/public`));
+              return {uid, profile: profSnap.exists()? profSnap.val() as UserProfile : null, role: (val as any).role || "member"};
+            }catch{ return {uid, profile:null as UserProfile|null, role:(val as any).role || "member"}; }
+          }));
+          if(stale) return;
+          // snapshot hâlâ aynı mı kontrol et (race)
+          void get(ref(db,`serverMembers/${selectedServer}`)).then(cur=>{
+            if(!cur.exists() && entries.length!==0) return;
+            if(cur.exists()){
+              const curKeys=JSON.stringify(Object.keys(cur.val() as object).sort());
+              if(curKeys!==snapId) return;
+            }
+            setMembers(results);
+          }).catch(()=>{ if(!stale) setMembers(results); });
+        }catch{}
+      })();
     });
+    return ()=>{ stale=true; try{unsub();}catch{} };
   },[user, selectedServer]);
 
   // Unread badge: backlog abone olurken tek seferlik gerçek sorguyla (createdAt
@@ -1067,20 +1099,25 @@ export default function Home(){
     const msgRef=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
     const payload: any = {
       serverId:selectedServer, channelId:selectedChannel, authorId:user.uid,
-      content: content || (attMeta ? `📎 ${attMeta.name}` : ""),
+      content: content || (attMeta ? `[dosya] ${attMeta.name}` : ""),
       authorName: profile?.displayName ?? profile?.username ?? username ?? "anon",
       createdAt: Date.now(),
     };
     if(attMeta) payload.attachment = attMeta;
     if(replyTo) payload.replyTo={ id: replyTo.id, authorName: replyTo.authorName, content: replyTo.content.slice(0,120) };
-    await set(msgRef,payload);
-    if(attMeta && attData && msgRef.key){
-      try{
-        await set(ref(db,`attachments/${selectedServer}/${selectedChannel}/${msgRef.key}`),{authorId:user.uid,type:attMeta.type,name:attMeta.name,mime:pendingFile?.file.type||"application/octet-stream",size:attMeta.size,data:attData});
-      }catch{ setToast("ek yüklenemedi"); }
+    try{
+      await set(msgRef,payload);
+      if(attMeta && attData && msgRef.key){
+        try{
+          await set(ref(db,`attachments/${selectedServer}/${selectedChannel}/${msgRef.key}`),{authorId:user.uid,type:attMeta.type,name:attMeta.name,mime:pendingFile?.file.type||"application/octet-stream",size:attMeta.size,data:attData});
+        }catch{ setToast("ek yüklenemedi"); }
+      }
+      setDraft(""); updateDraft(""); setReplyTo(null); setPendingFile(null); setSendingAttachment(false);
+      remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
+    }catch(e:any){
+      setToast(e?.message ? `mesaj gönderilemedi: ${e.message.slice(0,80)}` : "mesaj gönderilemedi — bağlantını kontrol et");
+      setSendingAttachment(false);
     }
-    setDraft(""); updateDraft(""); setReplyTo(null); setPendingFile(null); setSendingAttachment(false);
-    remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
   }
 
   function handleFileSelected(file: File){
@@ -1129,7 +1166,7 @@ export default function Home(){
     else if(c.startsWith("/giphy")){ setToast("giphy için ＋ → GIF kullan"); }
     else if(c.startsWith("/shrug")){ const msg= "¯\\_(ツ)_/¯ "+cmd.slice(7); const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`)); set(r,{serverId:selectedServer,channelId:selectedChannel,authorId:user!.uid,content:msg,authorName:profile?.displayName??username,createdAt:Date.now()}); }
     else if(c.startsWith("/me")){ const msg= `*${profile?.displayName??username} ${cmd.slice(4)}*`; const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`)); set(r,{serverId:selectedServer,channelId:selectedChannel,authorId:user!.uid,content:msg,authorName:profile?.displayName??username,createdAt:Date.now()}); }
-    else if(c.startsWith("/clear")){ setToast("ekran temizlendi (yerel)"); setMessages([]); }
+    else if(c.startsWith("/clear")){ setToast("yerel önbellek temizlendi — yenilemede mesajlar geri gelir"); setMessages([]); }
     else if(c.startsWith("/invite")){ setShowInvite(true); }
     else if(c.startsWith("/poll")){ setShowPoll(true); }
     else if(c.startsWith("/nick")){ const n=cmd.slice(6).trim(); if(n) set(ref(db,`users/${user!.uid}/public/displayName`),n).then(()=>setProfile(p=>p?{...p,displayName:n}:p)); setToast("nick → "+n); }
@@ -1792,7 +1829,7 @@ export default function Home(){
   ].filter(it=> !paletteQ || it.label.toLowerCase().includes(paletteQ.toLowerCase()));
 
   return (
-    <main className={`app-shell ${!showMembers || isDemo ? "no-members" : ""}`} onClick={()=>{setContextMenu(null); setChannelMenu(null);}}>
+    <main className={`app-shell ${!showMembers || isDemo ? "no-members" : ""}`} onClick={()=>{setContextMenu(null); setChannelMenu(null); setMobileSidebarOpen(false);}}>
       <aside className="server-rail">
         <div className="brand-mark">GG</div>
         <div className="rail-divider"/>
@@ -1802,11 +1839,11 @@ export default function Home(){
         <div style={{flex:1}}/>
         <button onClick={()=>setActiveView("profile")} style={{width:44, height:44, border:"1px solid var(--border)", background: (activeView as any)==="profile" ? "#fff" : "#111", color: (activeView as any)==="profile" ? "#000" : "#fff", display:"grid", placeItems:"center", overflow:"visible", flex:"0 0 auto", position:"relative", borderRadius:"50%"}} title="Profil">
           <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
-          {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
+          {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
         </button>
       </aside>
 
-      <aside className="channel-sidebar">
+      <aside className={`channel-sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`} onClick={(e)=>e.stopPropagation()}>
         {activeView==="servers" ? (
           <>
             <div className="server-title"><strong>SUNUCULAR</strong><button className="sidebar-back" onClick={()=>setActiveView("server")} title="Geri"><span className="icon"><Icon name="minimize" size={13}/></span> ÇIKIŞ</button></div>
@@ -1818,7 +1855,7 @@ export default function Home(){
                 <div style={{border:"1px dashed var(--border)", padding:12, fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center", margin:"8px 0"}}>henüz sunucun yok — yukarıdan oluştur</div>
               )}
               {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(s=>(
-                <div key={s.id} className={`dm-item ${selectedServer===s.id ? "active": ""}`} onClick={()=>{setSelectedServer(s.id); setActiveView("server");}}>
+                <div key={s.id} className={`dm-item ${selectedServer===s.id ? "active": ""}`} onClick={()=>{setSelectedServer(s.id); setActiveView("server"); setMobileSidebarOpen(false);}}>
                   <button className="dm-av" style={{cursor:"pointer", overflow:"hidden"}}>{s.iconUrl ? <img src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span className="server-hub-initial">{initials(s.name)}</span>}</button>
                   <div className="dm-meta"><div className="dm-name" style={{textAlign:"left"}}>{s.name}</div><div className="dm-sub">{s.memberCount ?? ""}</div></div>
                   <span style={{marginLeft:"auto"}}>{serverUnread(s.id) > 0 && <span className="unread-badge">{serverUnread(s.id)}</span>}</span>
@@ -1864,6 +1901,7 @@ export default function Home(){
                               onClick={()=>{
                                 if(ch.type==="voice"){ setJoinedVoice(ch.id); setSelectedChannel(ch.id); }
                                 else setSelectedChannel(ch.id);
+                                setMobileSidebarOpen(false);
                               }}
                               onContextMenu={e=>{ e.preventDefault(); setChannelMenu({x:e.clientX, y:e.clientY, channel:ch}); }}
                             >
@@ -1917,7 +1955,7 @@ export default function Home(){
                 <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:6}}>PROFİL FOTOĞRAFI</div>
                 <div style={{width:64, height:64, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"visible", marginBottom:8, position:"relative", borderRadius:"50%"}}>
                   <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}</div>
-                  {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none"}}/>}
+                  {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none"}}/>}
                 </div>
                 <label style={{display:"block", border:"1px dashed var(--border)", padding:"8px", textAlign:"center", cursor:"pointer", fontFamily:"var(--font-mono)", fontSize:11}}>
                   FOTOĞRAF SEÇ
@@ -2026,7 +2064,7 @@ export default function Home(){
                       </div>
                       <button className="friend-mini-btn" title="Mesaj" onClick={()=>startDM(f.uid)}><span className="icon"><Icon name="dm" size={12}/></span></button>
                       <button className="friend-mini-btn" title="Sunucuya davet et" onClick={()=>void inviteFriendToServer(f.uid)}><span className="icon"><Icon name="invite" size={12}/></span></button>
-                      <button className="friend-mini-btn" style={{color:"#ff4444"}} title="Arkadaşlıktan çıkar" onClick={()=>void removeFriend(f.uid)}>✕</button>
+                      <button className="friend-mini-btn" style={{color:"#ff3b30"}} title="Arkadaşlıktan çıkar" onClick={()=>void removeFriend(f.uid)}>✕</button>
                     </div>
                   ))}
                 </>
@@ -2041,7 +2079,7 @@ export default function Home(){
               {dmThreads.length===0 ? (
                 <div style={{border:"1px dashed var(--border)", padding:12, margin:"8px 0", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center"}}>henüz DM yok</div>
               ) : dmThreads.map(th=>(
-                <div key={th.id} className={`dm-item ${selectedDm===th.id ? "active": ""}`} onClick={()=>setSelectedDm(th.id)}>
+                <div key={th.id} className={`dm-item ${selectedDm===th.id ? "active": ""}`} onClick={()=>{setSelectedDm(th.id); setMobileSidebarOpen(false);}}>
                   <button className="dm-av" onClick={(e)=>{e.stopPropagation(); openProfile(th.otherUid);}} style={{cursor:"pointer"}}>{th.profile?.avatarUrl ? <img src={th.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(th.profile?.displayName||th.profile?.username||"??")}</button>
                   <div className="dm-meta"><div className="dm-name">{th.profile?.displayName||th.profile?.username}</div><div className="dm-sub">@{th.profile?.username}</div></div>
                 </div>
@@ -2067,7 +2105,7 @@ export default function Home(){
                 <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", letterSpacing:".06em", marginTop:8}}>SUNUCULARIM</div>
                 <div style={{display:"flex", flexDirection:"column", gap:8}}>
                   {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(s=>(
-                    <div key={s.id} className="server-portfolio-card" onClick={()=>{setSelectedServer(s.id); setActiveView("server");}}>
+                    <div key={s.id} className="server-portfolio-card" onClick={()=>{setSelectedServer(s.id); setActiveView("server"); setMobileSidebarOpen(false);}}>
                       <div className="spc-icon">{s.iconUrl ? <img src={s.iconUrl} alt=""/> : initials(s.name)}</div>
                       <div style={{flex:1, minWidth:0}}>
                         <div style={{fontWeight:700, fontSize:14}}>{s.name}</div>
@@ -2107,7 +2145,7 @@ export default function Home(){
                         <div style={{width:76, height:76, border:"2px solid #fff", background:"#000", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)", position:"relative", zIndex:2}}>
                           <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800, fontSize:20}}>{initials(profile?.displayName ?? username)}</span>}</div>
                           {/* decoration - image or border */}
-                          {profile?.decoration && (profile.decoration.startsWith("http") ? <img src={profile.decoration} alt="" style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/> : <div style={{position:"absolute", inset:-2, border:"2px solid #fff", borderRadius: profile.decoration==="circle" ? "50%" : "0", pointerEvents:"none"}}/>)}
+                          {profile?.decoration && (profile.decoration.startsWith("http") ? <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/> : <div style={{position:"absolute", inset:-2, border:"2px solid #fff", borderRadius: profile.decoration==="circle" ? "50%" : "0", pointerEvents:"none"}}/>)}
                           <div style={{position:"absolute", right:0, bottom:0, width:14, height:14, border:"2px solid var(--surface)", background: profile?.status==="online" ? "#23a559" : profile?.status==="idle" ? "#f0b132" : profile?.status==="dnd" ? "#f23f42" : "#80848e", borderRadius:"50%", boxShadow:"0 1px 2px rgba(0,0,0,.3)"}}/>
                         </div>
                         <div style={{marginBottom:4, display:"flex", gap:4, flexWrap:"wrap"}}>
@@ -2261,7 +2299,7 @@ export default function Home(){
                         </div>
                         <button className="btn" onClick={()=>startDM(f.uid)}>MESAJ</button>
                         <button className="btn" onClick={()=>void inviteFriendToServer(f.uid)} title="Sunucuya davet et">DAVET</button>
-                        <button className="btn" style={{color:"#ff4444"}} onClick={()=>void removeFriend(f.uid)} title="Arkadaşlıktan çıkar">ÇIKAR</button>
+                        <button className="btn" style={{color:"#ff3b30"}} onClick={()=>void removeFriend(f.uid)} title="Arkadaşlıktan çıkar">ÇIKAR</button>
                       </div>
                     ))}
                   </div>
@@ -2295,6 +2333,7 @@ export default function Home(){
           <>
             <header className="chat-header">
               <div className="channel-heading">
+                <button className="header-back mobile-toggle" onClick={()=>setMobileSidebarOpen(v=>!v)} title="Kanallar"><span className="icon"><Icon name="grid" size={14}/></span></button>
                 <span className="hash">{selectedChannelData?.type==="voice" ? "⌁" : "#"}</span>
                 <strong>{isDemo ? "hoş geldin" : selectedChannelData?.name ?? "genel"}</strong>
                 {!isDemo && <span className="topic">{selectedChannelData?.topic ?? ""}</span>}
@@ -2303,7 +2342,7 @@ export default function Home(){
                 <div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ara" /></div>
                 <button onClick={startCall} title="Sesli arama başlat" style={{border: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "1px solid #fff" : "1px solid var(--border)", background: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#fff" : "transparent", color: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#000" : "var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button>
                 <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo"){ setEditingChannel(selectedChannelData); setEditChannelName(selectedChannelData.name); setEditChannelTopic(selectedChannelData.topic||""); } }} title="Kanalı Düzenle"><span className="icon"><Icon name="settings"/></span></button>
-                <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"#ff4444", borderColor:"var(--border)"}}>🗑</button>
+                <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"#ff3b30", borderColor:"var(--border)"}}>🗑</button>
                 <button onClick={()=>setShowPalette(true)}>⌘K</button>
               </div>
             </header>
@@ -2811,7 +2850,7 @@ export default function Home(){
                 <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, display:"flex", gap:10, alignItems:"center"}}>
                   <div style={{width:48, height:48, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", flex:"0 0 auto"}}>
                     {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}
-                    {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none"}}/>}
+                    {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none"}}/>}
                     {profile?.decoration && !profile.decoration.startsWith("http") && <div style={{position:"absolute", inset:-2, border:"2px solid #fff", borderRadius: profile.decoration==="circle" ? "50%" : "0"}}/>}
                   </div>
                   <div style={{flex:1, minWidth:0}}>
@@ -2876,8 +2915,8 @@ export default function Home(){
                   <div style={{display:"grid", gridTemplateColumns:"repeat(6, 1fr)", gap:6, maxHeight:120, overflow:"auto", border:"1px solid var(--border)", padding:6, background:"#000"}}>
                     {DECORATIONS.map(d=>(
                       <button key={d.id} onClick={()=>setProfile(p=>p?{...p, decoration: d.url || undefined}:p)} title={d.label} style={{aspectRatio:"1", border:"1px solid var(--border)", background: (profile?.decoration||"")===d.url ? "#fff" : "#111", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", padding:0}}>
-                        {d.url ? <img src={d.url} alt={d.label} style={{width:"140%", height:"140%", objectFit:"contain", position:"absolute", inset:"-20%"}} loading="lazy"/> : <span style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>YOK</span>}
-                        <span style={{position:"absolute", bottom:1, left:0, right:0, background:"rgba(0,0,0,.7)", color:"#fff", fontFamily:"var(--font-mono)", fontSize:7, textAlign:"center", padding:"1px 0"}}>{d.label.slice(0,6)}</span>
+                        {d.url ? <img src={d.url} alt={d.label} style={{width:"140%", height:"140%", objectFit:"contain", position:"absolute", inset:"-20%"}} loading="lazy" onError={(e)=>{ (e.currentTarget as HTMLImageElement).style.display="none"; }}/> : <span style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>YOK</span>}
+                        <span style={{position:"absolute", bottom:1, left:0, right:0, background:"rgba(0,0,0,.7)", color:"#fff", fontFamily:"var(--font-mono)", fontSize:8, textAlign:"center", padding:"1px 0", lineHeight:1.2}}>{d.label.slice(0,6)}</span>
                       </button>
                     ))}
                   </div>
@@ -2965,7 +3004,7 @@ export default function Home(){
                     <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:12, display:"flex", gap:12, alignItems:"center"}}>
                       <div style={{width:64, height:64, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"hidden", position:"relative"}}>
                         {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}
-                        {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
+                        {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
                       </div>
                       <div style={{flex:1}}>
                         <div style={{fontWeight:700}}>{profile?.displayName}</div>
@@ -3153,10 +3192,10 @@ export default function Home(){
             <div className="modal-body" style={{paddingTop:48, position:"relative", textAlign:"left", overflow:"visible"}}>
               <div style={{position:"absolute", top:-32, left:16, width:68, height:68, border:"2px solid #fff", background:"#000", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)"}}>
                 <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{selectedProfile?.avatarUrl ? <img src={selectedProfile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800}}>{selectedProfile ? initials(selectedProfile.displayName||selectedProfile.username) : "??"}</span>}</div>
-                {selectedProfile?.decoration && selectedProfile.decoration.startsWith("http") && <img src={selectedProfile.decoration} alt="" style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/>}
+                {selectedProfile?.decoration && selectedProfile.decoration.startsWith("http") && <img src={selectedProfile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/>}
               </div>
               <div style={{position:"absolute", top:-32, right:16, display:"flex", gap:4}}>
-                {(selectedProfile?.badges||[]).map(b=> <span key={b} style={{background:"#fff", color:"#000", border:"1px solid #000", fontFamily:"var(--font-mono)", fontSize:8, fontWeight:700, padding:"2px 5px"}}>{b}</span>)}
+                {(selectedProfile?.badges||[]).map(b=> <span key={b} style={{background:"#fff", color:"#000", border:"1px solid #000", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700, padding:"2px 5px"}}>{b}</span>)}
               </div>
               {profileLoading ? <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center", padding:20}}>yükleniyor…</div> : selectedProfile ? (
                 <>
@@ -3188,7 +3227,7 @@ export default function Home(){
                   <div style={{display:"flex", gap:6, justifyContent:"flex-end", marginTop:12}}>
                     {selectedProfileUid!==user.uid && <button className="btn btn-primary" onClick={()=>{startDM(selectedProfileUid!); setSelectedProfileUid(null);}}>DM GÖNDER</button>}
                     {selectedProfileUid!==user.uid && (friends.some(f=>f.uid===selectedProfileUid) ? (
-  <button className="btn" onClick={()=>void removeFriend(selectedProfileUid)} style={{color:"#ff4444"}}>ARKADAŞLIĞI BİTİR</button>
+  <button className="btn" onClick={()=>void removeFriend(selectedProfileUid)} style={{color:"#ff3b30"}}>ARKADAŞLIĞI BİTİR</button>
 ) : sentRequests[selectedProfileUid] ? (
   <button className="btn" onClick={()=>void cancelFriendRequest(selectedProfileUid)}>İSTEK GÖNDERİLDİ — GERİ ÇEK</button>
 ) : (
@@ -3361,7 +3400,7 @@ export default function Home(){
           <div className="call-window">
             <div className="call-head">
               <div>
-                <div className="call-title">📞 Gelen Arama</div>
+                <div className="call-title" style={{display:"flex",alignItems:"center",gap:6}}><span className="icon"><Icon name="phone" size={14}/></span> Gelen Arama</div>
                 <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginTop:2}}>sizi arıyor…</div>
               </div>
             </div>
@@ -3379,7 +3418,6 @@ export default function Home(){
           </div>
         </div>
       )}
-      {toast && <div className="toast">{toast}</div>}
       {joinedVoice && (
         callPip ? (
           <div className="call-pip"
@@ -3416,8 +3454,8 @@ export default function Home(){
                         <div className="call-stage-bar">
                           <span className="call-stage-name">● {featured.kind==="screen" ? "EKRAN PAYLAŞIMI" : featured.uid===user.uid ? "Sen — kamera" : (featured.info?.profile?.displayName || featured.info?.profile?.username || "Kamera")}</span>
                           <span style={{marginLeft:"auto", display:"flex", gap:6}}>
-                            <button className="stage-btn" title="Tam ekran" onClick={(e)=>{ const v=e.currentTarget.parentElement?.parentElement?.querySelector("video"); if(v) void v.requestFullscreen().catch(()=>{}); }}>⛶</button>
-                            <button className="stage-btn" title="Ayrı pencerede aç (PIP)" onClick={(e)=>{ const v=e.currentTarget.parentElement?.parentElement?.querySelector("video") as HTMLVideoElement|null; if(v && (v as any).requestPictureInPicture) void (v as any).requestPictureInPicture().catch(()=>{}); }}>⧉</button>
+                            <button className="stage-btn" title="Tam ekran" onClick={(e)=>{ const v=e.currentTarget.parentElement?.parentElement?.querySelector("video"); if(v) void v.requestFullscreen().catch(()=>{}); }}><span className="icon"><Icon name="maximize" size={14}/></span></button>
+                            <button className="stage-btn" title="Ayrı pencerede aç (PIP)" onClick={(e)=>{ const v=e.currentTarget.parentElement?.parentElement?.querySelector("video") as HTMLVideoElement|null; if(v && (v as any).requestPictureInPicture) void (v as any).requestPictureInPicture().catch(()=>{}); }}><span className="icon"><Icon name="pip" size={14}/></span></button>
                           </span>
                         </div>
                         {Object.entries(voiceParticipants).filter(([uid])=> uid!==featured.uid).length>0 && (
