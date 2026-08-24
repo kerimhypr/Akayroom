@@ -17,7 +17,7 @@ export async function createStarterServer(uid: string) {
   if (!serverRef.key || !generalRef.key || !loungeRef.key) throw new Error("ID üretilemedi");
 
   const now = serverTimestamp();
-  await set(serverRef, { name: "Poseidon Lounge", ownerId: uid, createdAt: now });
+  await set(serverRef, { name: "Akayroom Lounge", ownerId: uid, createdAt: now });
   await set(ref(db, `serverMembers/${serverRef.key}/${uid}`), { role: "owner", joinedAt: now });
   // servers/.read bu index'e bakıyor — yazılmazsa sunucu kullanıcıya görünmez.
   await set(ref(db, `users/${uid}/servers/${serverRef.key}`), true);

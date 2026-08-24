@@ -212,7 +212,7 @@
           }
         },
         "events": {
-          ".read": "auth != null",
+          ".read": "auth != null && auth.uid === $uid",
           "$fromUid": {
             ".write": "auth != null && auth.uid === $fromUid",
             ".validate": "newData.hasChildren(['type', 'createdAt'])"

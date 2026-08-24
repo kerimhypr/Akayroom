@@ -3,7 +3,7 @@ export function normalizeUsername(username: string) {
 }
 
 export function usernameEmail(username: string) {
-  return `${normalizeUsername(username)}@poseidon.local`;
+  return `${normalizeUsername(username)}@akayroom.local`;
 }
 
 export function validUsername(username: string) {
