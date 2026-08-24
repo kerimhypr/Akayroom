@@ -9,6 +9,7 @@ import {
   User,
 } from "firebase/auth";
 import {
+  endAt,
   get,
   limitToLast,
   onChildAdded,
@@ -21,6 +22,7 @@ import {
   remove,
   serverTimestamp,
   set,
+  startAt,
   update,
 } from "firebase/database";
 import { auth, db, firebaseConfigured } from "@/lib/firebase";
@@ -489,35 +491,42 @@ export default function Home(){
     });
   },[user, selectedServer]);
 
-  // Unread badge tracking: count messages newer than lastRead[channel], skip counting when actively viewing.
-  // onChildAdded fires for existing children on attach; we use a per-key "primed" flag so only
-  // messages that arrive AFTER first snapshot are counted as incremental, and an initial get() computes
-  // the real backlog from lastRead.
+  // Unread badge: backlog abone olurken tek seferlik gerçek sorguyla (createdAt
+  // aralığı) hesaplanır; canlı artırım yalnızca sinceTs sonrasını sayar → reload
+  // sonrası da doğru, çift sayma/atlama olmaz. Aktif kanal ref'ten okunur.
   const activeChannelKey = activeView==="server" ? `${selectedServer}/${selectedChannel}` : null;
   const lastReadRef = useRef(lastRead);
   lastReadRef.current = lastRead;
+  const activeChannelKeyRef = useRef(activeChannelKey);
+  activeChannelKeyRef.current = activeChannelKey;
+  const activeDmRef = useRef({view: activeView, dm: selectedDm});
+  activeDmRef.current = {view: activeView, dm: selectedDm};
   useEffect(()=>{
     if(!user || selectedServer==="demo") return;
+    let cancelled = false;
     const unsubs: (()=>void)[] = [];
     channels.forEach(ch=>{
       if(ch.type==="voice") return;
       const key=`${selectedServer}/${ch.id}`;
-      let primed = false;
+      const seen0 = lastReadRef.current[key] || 0;
+      const sinceTs = Date.now();
+      void (async ()=>{
+        try{
+          const bq=query(ref(db,`messages/${selectedServer}/${ch.id}`), orderByChild("createdAt"), startAt(seen0+1), endAt(sinceTs));
+          const s=await get(bq);
+          if(cancelled || !s.exists()) return;
+          let n=0;
+          s.forEach(it=>{ const m=it.val() as ChatMessage; if(m && m.authorId!==user!.uid) n++; });
+          if(n>0 && activeChannelKeyRef.current!==key) setUnread(prev=>({...prev, [key]: n}));
+        }catch{}
+      })();
       const u = onChildAdded(ref(db,`messages/${selectedServer}/${ch.id}`),(snap)=>{
         const m = snap.val() as ChatMessage;
         if(!m || m.authorId===user.uid) return;
         const ts = m.createdAt || 0;
-        const seen = lastReadRef.current[key] || 0;
-        const isActive = activeChannelKey===key;
-        if(!primed){
-          primed = true;
-          if(!isActive && ts > seen){
-            setUnread(prev=>({...prev, [key]: (prev[key]||0)+1}));
-          }
-          return;
-        }
-        if(isActive) return;
-        if(ts <= seen) return;
+        if(ts<=sinceTs) return; // backlog sorgusunun kapsamı
+        if(activeChannelKeyRef.current===key) return;
+        if(ts <= (lastReadRef.current[key] || 0)) return;
         setUnread(prev=>({...prev, [key]: (prev[key]||0)+1}));
         if(m.content){
           setToastFlash({id:`${selectedServer}-${ch.id}-${snap.key}`, text: `${m.authorName||"biri"}: ${m.content.slice(0,80)}`});
@@ -525,8 +534,8 @@ export default function Home(){
       });
       unsubs.push(u);
     });
-    return ()=>unsubs.forEach(u=>{try{u();}catch{}});
-  },[user, selectedServer, channels, activeChannelKey]);
+    return ()=>{ cancelled=true; unsubs.forEach(u=>{try{u();}catch{}}); };
+  },[user, selectedServer, channels]);
 
   // When we open a channel, mark it read (persist lastRead)
   useEffect(()=>{
@@ -535,34 +544,41 @@ export default function Home(){
     setUnread(prev=>{ const n={...prev}; delete n[activeChannelKey]; return n; });
   },[activeChannelKey]);
 
-  // DM unread: count messages newer than lastRead[dm-{threadId}]
+  // DM unread: backlog gerçek sorguyla hesaplanır, canlı artırım sinceTs sonrasını sayar.
   useEffect(()=>{
     if(!user || dmThreads.length===0) return;
+    let cancelled = false;
     const unsubs = dmThreads.map(th=>{
-      let primed = false;
+      const key=`dm-${th.id}`;
+      const seen0 = lastReadRef.current[key] || 0;
+      const sinceTs = Date.now();
+      void (async ()=>{
+        try{
+          const bq=query(ref(db,`dmMessages/${th.id}`), orderByChild("createdAt"), startAt(seen0+1), endAt(sinceTs));
+          const s=await get(bq);
+          if(cancelled || !s.exists()) return;
+          let n=0;
+          s.forEach(it=>{ const m=it.val() as {authorId?:string}; if(m?.authorId && m.authorId!==user!.uid) n++; });
+          const act=activeDmRef.current;
+          if(n>0 && !(act.view==="dms" && act.dm===th.id)) setDmUnreadCount(prev=>({...prev, [th.id]: n}));
+        }catch{}
+      })();
       return onChildAdded(ref(db,`dmMessages/${th.id}`),(snap)=>{
         const m = snap.val() as {authorId?:string, content?:string, createdAt?:number};
         if(!m || !m.authorId || m.authorId===user.uid) return;
         const ts = m.createdAt || 0;
-        const seen = lastReadRef.current[`dm-${th.id}`] || 0;
-        const isActive = activeView==="dms" && selectedDm===th.id;
-        if(!primed){
-          primed = true;
-          if(!isActive && ts > seen){
-            setDmUnreadCount(prev=>({...prev, [th.id]: (prev[th.id]||0)+1}));
-          }
-          return;
-        }
-        if(isActive) return;
-        if(ts <= seen) return;
+        if(ts<=sinceTs) return; // backlog kapsamı
+        if(ts <= (lastReadRef.current[key] || 0)) return;
+        const act=activeDmRef.current;
+        if(act.view==="dms" && act.dm===th.id) return;
         setDmUnreadCount(prev=>({...prev, [th.id]: (prev[th.id]||0)+1}));
         if(m.content){
           setToastFlash({id:`dm-${th.id}-${snap.key}`, text:`${th.profile?.displayName||th.profile?.username||"biri"}: ${m.content.slice(0,80)}`});
         }
       });
     });
-    return ()=>unsubs.forEach(u=>{try{u();}catch{}});
-  },[user, dmThreads, activeView, selectedDm]);
+    return ()=>{ cancelled=true; unsubs.forEach(u=>{try{u();}catch{}}); };
+  },[user, dmThreads]);
 
   // Mark DM read when opening it
   useEffect(()=>{
@@ -635,30 +651,45 @@ export default function Home(){
     });
   },[user]);
 
-  // Listen for accepted/refused/removed events sent to me (3s toast + kendi tarafımı senkronize et)
+  // Arkadaşlık olayları (kabul/red/çıkarma). Event anahtarı GÖNDEREN uid'idir ve
+  // kurallar yalnızca gönderenin kendi slotuna yazılmasına izin verir; böylece
+  // üçüncü bir kişi başına ait olay taklit edemez. "accepted" ek olarak kendi
+  // outgoing kaydım varsa işlenir (istek atmadığım biri beni "kabul" edemez).
   useEffect(()=>{
     if(!user) return;
-    return onChildAdded(ref(db,`friendRequests/${user.uid}/events`),(snap)=>{
-      const ev = snap.val() as {type:string, fromName?:string, byUid?:string};
-      if(!ev) return;
-      const who = ev.fromName || "biri";
-      const by = ev.byUid && ev.byUid!==user.uid ? ev.byUid : null;
-      let text = "";
-      if(ev.type==="accepted"){
-        text = `${who} arkadaşlık isteğini kabul etti ✓`;
-        if(by){
-          void set(ref(db,`friends/${user.uid}/${by}`), true).catch(()=>{});
-          void remove(ref(db,`friendRequests/${user.uid}/outgoing/${by}`)).catch(()=>{});
+    return onValue(ref(db,`friendRequests/${user.uid}/events`), (snap)=>{
+      if(!snap.exists()) return;
+      const all = snap.val() as Record<string,{type?:string, fromName?:string}>;
+      void (async()=>{
+        for(const [fromUid, ev] of Object.entries(all)){
+          const evRef=ref(db,`friendRequests/${user.uid}/events/${fromUid}`);
+          if(!ev?.type){ await remove(evRef).catch(()=>{}); continue; }
+          const who = ev.fromName || "biri";
+          try{
+            if(ev.type==="accepted"){
+              const out = await get(ref(db,`friendRequests/${user.uid}/outgoing/${fromUid}`));
+              if(out.exists()){
+                await set(ref(db,`friends/${user.uid}/${fromUid}`), true);
+                await remove(ref(db,`friendRequests/${user.uid}/outgoing/${fromUid}`));
+                setToastFlash({id:`ev-${user.uid}-${fromUid}-a`, text:`${who} arkadaşlık isteğini kabul etti ✓`});
+              }
+            } else if(ev.type==="rejected"){
+              const out = await get(ref(db,`friendRequests/${user.uid}/outgoing/${fromUid}`));
+              if(out.exists()){
+                await remove(ref(db,`friendRequests/${user.uid}/outgoing/${fromUid}`));
+                setToastFlash({id:`ev-${user.uid}-${fromUid}-r`, text:`${who} arkadaşlık isteğini reddetti ✕`});
+              }
+            } else if(ev.type==="removed"){
+              const fr = await get(ref(db,`friends/${user.uid}/${fromUid}`));
+              if(fr.exists()){
+                await remove(ref(db,`friends/${user.uid}/${fromUid}`));
+                setToastFlash({id:`ev-${user.uid}-${fromUid}-x`, text:`${who} seni arkadaşlıktan çıkardı`});
+              }
+            }
+          }catch{}
+          await remove(evRef).catch(()=>{});
         }
-      } else if(ev.type==="rejected"){
-        text = `${who} arkadaşlık isteğini reddetti ✕`;
-        if(by) void remove(ref(db,`friendRequests/${user.uid}/outgoing/${by}`)).catch(()=>{});
-      } else if(ev.type==="removed"){
-        text = `${who} seni arkadaşlıktan çıkardı`;
-        if(by) void remove(ref(db,`friends/${user.uid}/${by}`)).catch(()=>{});
-      }
-      if(text) setToastFlash({id:`ev-${snap.key}`, text});
-      void remove(ref(db,`friendRequests/${user.uid}/events/${snap.key}`)).catch(()=>{});
+      })();
     });
   },[user]);
 
@@ -1457,7 +1488,7 @@ export default function Home(){
       // "accepted" eventini alınca yapar (çevrimdışıysa login'de işlenir).
       await set(ref(db,`friends/${user.uid}/${fromUid}`), true);
       await remove(ref(db,`friendRequests/${user.uid}/incoming/${fromUid}`));
-      await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"accepted", byUid:user.uid, fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
+      await set(ref(db,`friendRequests/${fromUid}/events/${user.uid}`), {type:"accepted", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
       setToast("arkadaş oldun ✓");
     }catch{ setToast("işlem başarısız"); }
   }
@@ -1466,7 +1497,7 @@ export default function Home(){
     if(!user) return;
     try{
       await remove(ref(db,`friendRequests/${user.uid}/incoming/${fromUid}`));
-      await set(ref(db,`friendRequests/${fromUid}/events/${Date.now()}`), {type:"rejected", byUid:user.uid, fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
+      await set(ref(db,`friendRequests/${fromUid}/events/${user.uid}`), {type:"rejected", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
       setToast("istek reddedildi");
     }catch{ setToast("işlem başarısız"); }
   }
@@ -1486,8 +1517,8 @@ export default function Home(){
     try{
       await remove(ref(db,`friends/${user.uid}/${friendUid}`));
       // Karşı tarafın friends düğümüne yazma iznimiz yok; event ile bildir,
-      // kendi tarafını istemcisi temizleyecek.
-      await set(ref(db,`friendRequests/${friendUid}/events/${Date.now()}`), {type:"removed", byUid:user.uid, fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
+      // kendi tarafını istemcisi temizleyecek. Event anahtarı = gönderen uid.
+      await set(ref(db,`friendRequests/${friendUid}/events/${user.uid}`), {type:"removed", fromName: profile?.displayName || username || "biri", createdAt: Date.now()});
       setFriends(prev=> prev.filter(f=>f.uid!==friendUid));
       setToast("arkadaşlıktan çıkarıldı");
     }catch{ setToast("işlem başarısız"); }

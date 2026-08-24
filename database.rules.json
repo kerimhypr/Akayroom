@@ -49,7 +49,7 @@
     },
     "servers": {
       "$serverId": {
-        ".read": "auth != null && root.child('users').child(auth.uid).child('servers').child($serverId).exists()",
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('servers').child($serverId).exists() || root.child('serverMembers').child($serverId).child(auth.uid).exists())",
         ".write": "auth != null && (!data.exists() || data.child('ownerId').val() === auth.uid)",
         ".validate": "newData.hasChildren(['name', 'ownerId', 'createdAt'])"
       }
@@ -211,11 +211,11 @@
           }
         },
         "events": {
-          "$eventId": {
-            ".write": "auth != null",
+          ".read": "auth != null",
+          "$fromUid": {
+            ".write": "auth != null && auth.uid === $fromUid",
             ".validate": "newData.hasChildren(['type', 'createdAt'])"
-          },
-          ".read": "auth != null"
+          }
         }
       }
     },
