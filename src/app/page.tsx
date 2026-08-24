@@ -95,6 +95,11 @@ function Icon({name, size=14}: {name: string, size?: number}){
     camOff: <><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/><line x1="1" x2="23" y1="1" y2="23"/></>,
     screen: <><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>,
     user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+    edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
+    trash: <><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>,
+    check: <><polyline points="20 6 9 17 4 12"/></>,
+    arrowLeft: <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
+    close: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
   };
   return <svg {...common}>{paths[name] ?? paths.hash}</svg>;
 }
@@ -194,7 +199,7 @@ function RenderContent({ text }: { text: string }) {
   return <>{parts}</>;
 }
 
-const fallbackServers: Server[] = [{ id:"demo", name:"GHOSTGRID // DEMO", ownerId:"demo", createdAt:0 }];
+const fallbackServers: Server[] = [{ id:"demo", name:"AKAYROOM // DEMO", ownerId:"demo", createdAt:0 }];
 const fallbackChannels: Channel[] = [
   { id:"general", name:"genel", type:"text", position:0, topic:"genel sohbet" },
   { id:"voice", name:"sesli-oda", type:"voice", position:1 },
@@ -442,9 +447,9 @@ export default function Home(){
       const next=Object.entries(snap.val()).map(([id,v])=>({id, ...(v as Omit<Channel,"id">)}));
       next.sort((a,b)=>a.position-b.position);
       setChannels(next);
-      if(next[0] && !next.some(c=>c.id===selectedChannel)) setSelectedChannel(next[0].id);
+      setSelectedChannel(prev=> (next[0] && !next.some(c=>c.id===prev) ? next[0].id : prev));
     });
-  },[user,selectedServer,selectedChannel]);
+  },[user,selectedServer]);
 
   useEffect(()=>{
     if(!user || selectedServer==="demo") { setMessages([]); return; }
@@ -1209,31 +1214,37 @@ export default function Home(){
 
   async function createChannel(){
     if(!user || selectedServer==="demo" || !newChannelName.trim()) return;
-    const chRef=push(ref(db,`channels/${selectedServer}`));
-    await set(chRef,{name:newChannelName.trim().toLowerCase().replace(/\s+/g,"-"), type:newChannelType, position: channels.length, categoryId: newChannelCat || null, createdAt: serverTimestamp()});
-    setShowCreateChannel(false); setNewChannelName(""); setToast(`#${newChannelName}`);
+    try{
+      const chRef=push(ref(db,`channels/${selectedServer}`));
+      await set(chRef,{name:newChannelName.trim().toLowerCase().replace(/\s+/g,"-"), type:newChannelType, position: channels.length, categoryId: newChannelCat || null, createdAt: serverTimestamp()});
+      setShowCreateChannel(false); setNewChannelName(""); setToast(`#${newChannelName}`);
+    }catch(e:any){ setToast(e?.message ? `kanal oluşturulamadı: ${e.message.slice(0,60)}` : "kanal oluşturulamadı"); }
   }
   async function deleteChannel(channelId: string){
     if(!user || selectedServer==="demo") return;
     if(!confirm("kanalı silmek istiyor musun? mesajlar da silinecek.")) return;
-    await remove(ref(db,`channels/${selectedServer}/${channelId}`));
-    await remove(ref(db,`messages/${selectedServer}/${channelId}`));
-    await remove(ref(db,`attachments/${selectedServer}/${channelId}`)).catch(()=>{});
-    await remove(ref(db,`signaling/${channelId}`));
-    if(selectedChannel===channelId){
-      const remaining = channels.filter(c=>c.id!==channelId);
-      if(remaining[0]) setSelectedChannel(remaining[0].id);
-    }
-    setToast("kanal silindi");
+    try{
+      await remove(ref(db,`channels/${selectedServer}/${channelId}`));
+      await remove(ref(db,`messages/${selectedServer}/${channelId}`));
+      await remove(ref(db,`attachments/${selectedServer}/${channelId}`)).catch(()=>{});
+      await remove(ref(db,`signaling/${channelId}`));
+      if(selectedChannel===channelId){
+        const remaining = channels.filter(c=>c.id!==channelId);
+        if(remaining[0]) setSelectedChannel(remaining[0].id);
+      }
+      setToast("kanal silindi");
+    }catch(e:any){ setToast(e?.message ? `silinemedi: ${e.message.slice(0,60)}` : "silinemedi"); }
     setChannelMenu(null);
   }
   async function saveChannelEdit(){
     if(!editingChannel || !user || selectedServer==="demo") return;
     const newName = editChannelName.trim().toLowerCase().replace(/\s+/g,"-");
     if(!newName) return;
-    await update(ref(db,`channels/${selectedServer}/${editingChannel.id}`),{name:newName, topic: editChannelTopic.trim() || null});
-    setToast("kanal güncellendi");
-    setEditingChannel(null);
+    try{
+      await update(ref(db,`channels/${selectedServer}/${editingChannel.id}`),{name:newName, topic: editChannelTopic.trim() || null});
+      setToast("kanal güncellendi");
+      setEditingChannel(null);
+    }catch(e:any){ setToast(e?.message ? `güncellenemedi: ${e.message.slice(0,60)}` : "güncellenemedi"); }
   }
   function startCall(){
     if(!user || selectedServer==="demo") return;
@@ -1676,33 +1687,37 @@ export default function Home(){
   async function sendDMMessage(){
     const content=dmDraft.trim();
     if(!user || !selectedDm || (!content && !dmPendingFile)) return;
-    let attachment: MessageAttachmentMeta|null=null;
-    let data: string|null=null;
-    if(dmPendingFile){
-      attachment={type:attachmentKind(dmPendingFile.file), name:dmPendingFile.file.name, size:dmPendingFile.file.size};
-      data=attachment.type==="image" && dmPendingFile.preview ? dmPendingFile.preview : await fileToDataUrl(dmPendingFile.file);
-      if(data.length>9.5*1024*1024){ setToast("DM dosyası çok büyük"); return; }
-    }
-    const r=push(ref(db,`dmMessages/${selectedDm}`));
-    await set(r,{authorId:user.uid, content:content || `📎 ${attachment!.name}`, createdAt:Date.now(), attachment});
-    if(attachment && data && r.key) await set(ref(db,`dmAttachments/${selectedDm}/${r.key}`),{authorId:user.uid,type:attachment.type,name:attachment.name,size:attachment.size,mime:dmPendingFile!.file.type,data});
-    await update(ref(db,`dmThreads/${selectedDm}`),{lastMessageAt:Date.now()});
-    setDmDraft(""); setDmPendingFile(null);
+    try{
+      let attachment: MessageAttachmentMeta|null=null;
+      let data: string|null=null;
+      if(dmPendingFile){
+        attachment={type:attachmentKind(dmPendingFile.file), name:dmPendingFile.file.name, size:dmPendingFile.file.size};
+        data=attachment.type==="image" && dmPendingFile.preview ? dmPendingFile.preview : await fileToDataUrl(dmPendingFile.file);
+        if(data.length>9.5*1024*1024){ setToast("DM dosyası çok büyük"); return; }
+      }
+      const r=push(ref(db,`dmMessages/${selectedDm}`));
+      await set(r,{authorId:user.uid, content:content || `[dosya] ${attachment!.name}`, createdAt:Date.now(), attachment});
+      if(attachment && data && r.key) await set(ref(db,`dmAttachments/${selectedDm}/${r.key}`),{authorId:user.uid,type:attachment.type,name:attachment.name,size:attachment.size,mime:dmPendingFile!.file.type,data});
+      await update(ref(db,`dmThreads/${selectedDm}`),{lastMessageAt:Date.now()});
+      setDmDraft(""); setDmPendingFile(null);
+    }catch(e:any){ setToast(e?.message ? `DM gönderilemedi: ${e.message.slice(0,60)}` : "DM gönderilemedi"); }
   }
 
   async function deleteDMMessage(id:string){
     if(!user || !selectedDm) return;
     const msg=dmMsgs.find(m=>m.id===id);
     if(!msg || msg.authorId!==user.uid){setToast("sadece kendi mesajın");return;}
-    await remove(ref(db,`dmMessages/${selectedDm}/${id}`));
+    try{ await remove(ref(db,`dmMessages/${selectedDm}/${id}`)); }catch(e:any){ setToast("silinemedi"); }
   }
 
   async function saveDMEdit(){
     if(!user || !selectedDm || !dmEditingId || !dmEditContent.trim()) return;
     const msg=dmMsgs.find(m=>m.id===dmEditingId);
     if(!msg || msg.authorId!==user.uid){setToast("sadece kendi mesajın");return;}
-    await update(ref(db,`dmMessages/${selectedDm}/${dmEditingId}`),{content:dmEditContent.trim(),editedAt:Date.now()});
-    setDmEditingId(null); setDmEditContent("");
+    try{
+      await update(ref(db,`dmMessages/${selectedDm}/${dmEditingId}`),{content:dmEditContent.trim(),editedAt:Date.now()});
+      setDmEditingId(null); setDmEditContent("");
+    }catch(e:any){ setToast("düzenlenemedi"); }
   }
 
   function handleDmFile(file: File){
@@ -1809,7 +1824,7 @@ export default function Home(){
 
   const isDemo = selectedServer==="demo";
 
-  if(authLoading) return <main className="loading-screen">GHOSTGRID — YÜKLENİYOR…</main>;
+  if(authLoading) return <main className="loading-screen">AKAYROOM — YÜKLENİYOR…</main>;
   if(!user){
     if(showLanding) return <Landing onLogin={()=>{setShowLanding(false); setRegisterMode(false);}} onRegister={()=>{setShowLanding(false); setRegisterMode(true);}} />;
     return <AuthScreen registerMode={registerMode} setRegisterMode={setRegisterMode} username={username} setUsername={setUsername} password={password} setPassword={setPassword} displayName={displayName} setDisplayName={setDisplayName} error={authError} onSubmit={submitAuth} configured={firebaseConfigured} onBack={()=>setShowLanding(true)} />;
@@ -1831,7 +1846,7 @@ export default function Home(){
   return (
     <main className={`app-shell ${!showMembers || isDemo ? "no-members" : ""}`} onClick={()=>{setContextMenu(null); setChannelMenu(null); setMobileSidebarOpen(false);}}>
       <aside className="server-rail">
-        <div className="brand-mark">GG</div>
+        <div className="brand-mark">AR</div>
         <div className="rail-divider"/>
         <button className={`server-icon dm ${activeView==="servers"?"active":""}`} onClick={()=>setActiveView("servers")} title="Sunucular"><span className="icon"><Icon name="grid"/></span></button>
         <button className={`server-icon dm ${activeView==="friends"?"active":""}`} onClick={()=>setActiveView("friends")} title="Arkadaşlar"><span className="icon"><Icon name="users"/></span>{(Object.keys(friendRequests).length > 0 || Object.keys(incomingServerInvites).length > 0) && <span className="unread-badge rail-badge">{Object.keys(friendRequests).length + Object.keys(incomingServerInvites).length}</span>}</button>
@@ -1866,7 +1881,7 @@ export default function Home(){
         ) : activeView==="server" ? (
           <>
             <div className="server-title">
-              {isDemo ? <strong>GHOSTGRID</strong> : <strong>{selectedServerData?.name}</strong>}
+              {isDemo ? <strong>AKAYROOM</strong> : <strong>{selectedServerData?.name}</strong>}
               {!isDemo && (
                 <div style={{display:"flex", gap:6}}>
                   <button onClick={()=>setShowMembers(v=>!v)} title="Üyeler" style={{width:26,height:26,border:"1px solid var(--border)",background: showMembers?"#fff":"transparent",color: showMembers?"#000":"var(--muted)",display:"grid",placeItems:"center"}}>◫</button>
@@ -1909,8 +1924,8 @@ export default function Home(){
                               <span className="ch-name">{ch.name}</span>
                               {ch.type==="voice" && <span style={{fontSize:10, opacity:.5}}>●</span>}
                               <span style={{marginLeft:"auto", display:"flex", gap:2, opacity:0}} className="ch-actions-hover">
-                                <span onClick={e=>{e.stopPropagation(); setEditingChannel(ch); setEditChannelName(ch.name); setEditChannelTopic(ch.topic||"");}} style={{border:"1px solid var(--border)", width:18, height:18, display:"grid", placeItems:"center", fontSize:10}} title="Düzenle">✎</span>
-                                <span onClick={e=>{e.stopPropagation(); deleteChannel(ch.id);}} style={{border:"1px solid var(--border)", width:18, height:18, display:"grid", placeItems:"center", fontSize:10}} title="Sil">🗑</span>
+                                <span onClick={e=>{e.stopPropagation(); setEditingChannel(ch); setEditChannelName(ch.name); setEditChannelTopic(ch.topic||"");}} style={{border:"1px solid var(--border)", width:18, height:18, display:"grid", placeItems:"center"}} title="Düzenle"><span className="icon"><Icon name="edit" size={10}/></span></span>
+                                <span onClick={e=>{e.stopPropagation(); deleteChannel(ch.id);}} style={{border:"1px solid var(--border)", width:18, height:18, display:"grid", placeItems:"center"}} title="Sil"><span className="icon"><Icon name="trash" size={10}/></span></span>
                               </span>
                             </button>
                           </div>
@@ -2374,7 +2389,7 @@ export default function Home(){
               {isDemo ? (
                 <div className="welcome animate-slide">
                   <div className="welcome-icon">◈</div>
-                  <h1>GHOSTGRID</h1>
+                  <h1>AKAYROOM</h1>
                   <p>minimal, siyah-beyaz. önce bir sunucu kur.</p>
                   <button className="btn btn-primary" style={{marginTop:12}} onClick={()=>setShowCreateServer(true)}>SUNUCU OLUŞTUR</button>
                 </div>
@@ -2665,7 +2680,7 @@ export default function Home(){
                 {newServerIcon && <button className="icon-upload-btn" onClick={()=>setNewServerIcon("")}>KALDIR</button>}
               </div>
               <label>SUNUCU ADI</label>
-              <input value={newServerName} onChange={e=>setNewServerName(e.target.value)} placeholder="ghost-ops" autoFocus />
+              <input value={newServerName} onChange={e=>setNewServerName(e.target.value)} placeholder="AKAY-ops" autoFocus />
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={()=>setShowCreateServer(false)}>İPTAL</button>
@@ -2866,7 +2881,7 @@ export default function Home(){
                   <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8}}>
                     <div>
                       <label>ÜNVAN — TITLE <span style={{fontWeight:400, textTransform:"none", letterSpacing:0}}>(serbest)</span></label>
-                      <input value={profile?.title ?? ""} onChange={e=> setProfile(p=> p? {...p, title:e.target.value}:p)} placeholder="Founder • Ghost • ..." />
+                      <input value={profile?.title ?? ""} onChange={e=> setProfile(p=> p? {...p, title:e.target.value}:p)} placeholder="Founder • AKAY • ..." />
                     </div>
                     <div>
                       <label>PRONOUNS <span style={{fontWeight:400, textTransform:"none"}}>— ara</span></label>
@@ -2912,7 +2927,7 @@ export default function Home(){
 
                 <div>
                   <label>DEKORASYON — Discord tarzı <span style={{fontWeight:400, textTransform:"none"}}>({DECORATIONS.length} adet)</span></label>
-                  <div style={{display:"grid", gridTemplateColumns:"repeat(6, 1fr)", gap:6, maxHeight:120, overflow:"auto", border:"1px solid var(--border)", padding:6, background:"#000"}}>
+                  <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(56px, 1fr))", gap:6, maxHeight:120, overflow:"auto", border:"1px solid var(--border)", padding:6, background:"#000"}}>
                     {DECORATIONS.map(d=>(
                       <button key={d.id} onClick={()=>setProfile(p=>p?{...p, decoration: d.url || undefined}:p)} title={d.label} style={{aspectRatio:"1", border:"1px solid var(--border)", background: (profile?.decoration||"")===d.url ? "#fff" : "#111", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", padding:0}}>
                         {d.url ? <img src={d.url} alt={d.label} style={{width:"140%", height:"140%", objectFit:"contain", position:"absolute", inset:"-20%"}} loading="lazy" onError={(e)=>{ (e.currentTarget as HTMLImageElement).style.display="none"; }}/> : <span style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>YOK</span>}
@@ -2937,7 +2952,7 @@ export default function Home(){
                     </div>
                     <label style={{marginTop:8}}>ROZETLER</label>
                     <div style={{display:"flex", gap:4, flexWrap:"wrap"}}>
-                      {["OPERATOR","EARLY","BOOSTER","DEV","GHOST"].map(b=>{
+                      {["OPERATOR","EARLY","BOOSTER","DEV","AKAY"].map(b=>{
                         const has = (profile?.badges||[]).includes(b);
                         return <button key={b} onClick={()=>setProfile(p=>{const cur=p?.badges||[]; const next= has ? cur.filter(x=>x!==b) : [...cur,b]; return p?{...p, badges: next}:p;})} style={{border:"1px solid var(--border)", background: has ? "#fff":"transparent", color: has ? "#000":"var(--muted)", padding:"4px 6px", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700}}>{b}</button>
                       })}
@@ -3047,7 +3062,7 @@ export default function Home(){
                   <div style={{display:"flex", flexDirection:"column", gap:12}}>
                     <div style={{border:"1px solid var(--border)", padding:12, background:"var(--surface-2)"}}>
                       <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>TEMA</div>
-                      <div style={{fontSize:11, color:"var(--muted)", marginTop:4}}>GhostGrid brutalist — siyah/beyaz, 1px border, JetBrains Mono. Tema şimdilik sabit, yakında açık/koyu.</div>
+                      <div style={{fontSize:11, color:"var(--muted)", marginTop:4}}>Akayroom brutalist — siyah/beyaz, 1px border, JetBrains Mono. Tema şimdilik sabit, yakında açık/koyu.</div>
                       <div style={{display:"flex", gap:6, marginTop:8}}>
                         <div style={{flex:1, height:32, border:"1px solid #fff", background:"#000", display:"grid", placeItems:"center", fontFamily:"var(--font-mono)", fontSize:10}}>SİYAH</div>
                         <div style={{flex:1, height:32, border:"1px solid var(--border)", background:"#fff", color:"#000", display:"grid", placeItems:"center", fontFamily:"var(--font-mono)", fontSize:10}}>BEYAZ (yakında)</div>
@@ -3078,7 +3093,7 @@ export default function Home(){
                   <div style={{display:"flex", flexDirection:"column", gap:12, maxWidth:440}}>
                     <div style={{border:"1px solid #ff5c70", background:"#190006", padding:16}}>
                       <div style={{fontFamily:"var(--font-mono)", fontSize:12, fontWeight:700, color:"#ff9baf"}}>OTURUMU KAPAT</div>
-                      <div style={{fontSize:12, color:"#ffb7c3", marginTop:8}}>Bu cihazdaki GhostGrid oturumun kapatılır. Hesabın ve sunucuların silinmez.</div>
+                      <div style={{fontSize:12, color:"#ffb7c3", marginTop:8}}>Bu cihazdaki Akayroom oturumun kapatılır. Hesabın ve sunucuların silinmez.</div>
                       <button className="btn btn-danger" onClick={()=>signOut(auth)} style={{marginTop:14, borderColor:"#ff9baf", color:"#ff9baf"}}>ÇIKIŞ YAP</button>
                     </div>
                     <div style={{border:"1px dashed var(--border)", padding:12, fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>Hesabı kalıcı silmek için Hesabım sekmesindeki Hesabı Sil alanını kullan.</div>
@@ -3086,7 +3101,7 @@ export default function Home(){
                 )}
               </div>
               <div className="modal-actions">
-                <span style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginRight:"auto"}}>GHOSTGRID — discord esintisi, brutalist ruh</span>
+                <span style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginRight:"auto"}}>AKAYROOM — discord esintisi, brutalist ruh</span>
                 <button className="btn" onClick={()=>setShowAccountSettings(false)}>KAPAT</button>
               </div>
             </div>
@@ -3546,7 +3561,7 @@ function Landing({onLogin, onRegister}: {onLogin:()=>void, onRegister:()=>void})
   return (
     <main className="landing">
       <nav className="landing-nav animate-fade">
-        <div className="nav-logo"><i>GG</i> GHOSTGRID<span style={{color:"var(--muted)", fontWeight:400}}> // OPERATOR COMMS</span></div>
+        <div className="nav-logo"><i>AR</i> AKAYROOM<span style={{color:"var(--muted)", fontWeight:400}}> // OPERATOR COMMS</span></div>
         <div className="nav-links">
           <a href="#features">özellikler</a>
           <a href="#manifesto">manifesto</a>
@@ -3558,7 +3573,7 @@ function Landing({onLogin, onRegister}: {onLogin:()=>void, onRegister:()=>void})
         <div className="landing-badge"><i/> SİYAH — BEYAZ — TERMINAL • v0.4 • BRUTALIST</div>
         <h1 className="landing-title">SİNYAL.<br/>GÜRÜLTÜ DEĞİL.<br/><span>Discord rahatlığı,<br/>mühendis sadeliğinde.</span></h1>
         <p className="landing-sub">
-          GhostGrid, ekipler için tek operatör mantığında kurulmuş minimal comms.
+          Akayroom, ekipler için tek operatör mantığında kurulmuş minimal comms.
           Sunucu, kanal, ses, DM — hepsi tek sayfada değil, doğru yerde. Gereksiz yok.
           Siyah-beyaz, 1px border, JetBrains Mono. Hızlı, sessiz, kalıcı.
         </p>
@@ -3568,14 +3583,14 @@ function Landing({onLogin, onRegister}: {onLogin:()=>void, onRegister:()=>void})
           <span style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", alignSelf:"center"}}>davet koduyla katıl • kurulum yok</span>
         </div>
         <div className="landing-terminal">
-          <div className="term-head"><span>GHOSTGRID.SYS // LIVE</span><span>● REC</span></div>
+          <div className="term-head"><span>AKAYROOM.SYS // LIVE</span><span>● REC</span></div>
           <div className="term-body">
-            <div><span className="prompt">operator@ghostgrid</span> ./init --server ghost-ops</div>
+            <div><span className="prompt">operator@akayroom</span> ./init --server AKAY-ops</div>
             <div style={{color:"#fff"}}>  ▸ sunucu kuruldu — #genel #sesli-oda</div>
-            <div><span className="prompt">operator@ghostgrid</span> ./invite --create</div>
+            <div><span className="prompt">operator@akayroom</span> ./invite --create</div>
             <div style={{color:"#fff"}}>  ▸ davet: <b style={{background:"#fff", color:"#000", padding:"0 4px"}}>X7K9PQ</b> — paylaş ve başla</div>
-            <div><span className="prompt">operator@ghostgrid</span> ./msg #genel "ilk sinyal"</div>
-            <div style={{opacity:.6}}>  ▸ low-latency • E2E stub • 12ms</div>
+            <div><span className="prompt">operator@akayroom</span> ./msg #genel "ilk sinyal"</div>
+            <div style={{opacity:.6}}>  ▸ low-latency • 12ms • WebRTC</div>
           </div>
         </div>
       </section>
@@ -3615,7 +3630,7 @@ function Landing({onLogin, onRegister}: {onLogin:()=>void, onRegister:()=>void})
         </div>
       </section>
       <footer className="landing-footer">
-        <span>© 2026 GHOSTGRID — single-developer, shadcn mantığı, AI kokusu yok.</span>
+        <span>© 2026 AKAYROOM — single-developer, shadcn mantığı, AI kokusu yok.</span>
         <span style={{display:"flex", gap:12}}><a href="#" onClick={(e)=>{e.preventDefault(); onLogin();}}>giriş</a><a href="#" onClick={(e)=>{e.preventDefault(); onRegister();}}>kayıt</a><span>● online</span></span>
       </footer>
     </main>
@@ -3627,7 +3642,7 @@ function AuthScreen(props:{registerMode:boolean; setRegisterMode:(v:boolean)=>vo
     <main className="auth-screen">
       <section className="auth-card animate-slide">
       <button onClick={props.onBack} style={{position:"absolute", top:8, right:8, border:"1px solid var(--border)", background:"transparent", width:24, height:24, display:"grid", placeItems:"center", fontSize:12}}>✕</button>
-        <div className="auth-logo">GG</div>
+        <div className="auth-logo">AR</div>
         <h1>{props.registerMode ? "KATIL" : "GİRİŞ"}</h1>
         <p className="auth-subtitle">siyah-beyaz, tek operatör. gürültü yok.</p>
         {!props.configured && <div className="setup-note">Firebase .env.local bekleniyor</div>}
@@ -3636,7 +3651,7 @@ function AuthScreen(props:{registerMode:boolean; setRegisterMode:(v:boolean)=>vo
           <label>KULLANICI ADI<input value={props.username} onChange={e=>props.setUsername(e.target.value)} placeholder="kullanici_adi" autoComplete="username" /></label>
           <label>ŞİFRE<input value={props.password} onChange={e=>props.setPassword(e.target.value)} type="password" placeholder="••••••••" autoComplete={props.registerMode?"new-password":"current-password"} /></label>
           {props.error && <div className="auth-error">ERR // {props.error}</div>}
-          <button className="primary-button" type="submit">{props.registerMode ? "OLUSTUR" : "GIRIS"}</button>
+          <button className="primary-button" type="submit">{props.registerMode ? "OLUŞTUR" : "GİRİŞ"}</button>
         </form>
         <div className="auth-switch">{props.registerMode? "hesabın var mı?" : "hesabın yok mu?"} <button onClick={()=>props.setRegisterMode(!props.registerMode)}>{props.registerMode? "Giriş":"Kayıt"}</button></div>
       </section>

@@ -58,8 +58,8 @@
       "$serverId": {
         ".read": "auth != null && data.child(auth.uid).exists()",
         "$uid": {
-          ".write": "auth != null && (auth.uid === $uid || root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'owner' || root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'admin')",
-          ".validate": "newData.hasChildren(['role', 'joinedAt'])"
+          ".write": "auth != null && ( (auth.uid === $uid && !data.exists() && newData.child('role').val() === 'member') || (auth.uid === $uid && data.exists() && !newData.exists()) || (auth.uid === $uid && data.exists() && newData.child('role').val() === data.child('role').val() && newData.child('joinedAt').val() === data.child('joinedAt').val()) || root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'owner' || (root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'admin' && newData.child('role').val() !== 'owner') )",
+          ".validate": "newData.hasChildren(['role', 'joinedAt']) && (newData.child('role').val() === 'member' || newData.child('role').val() === 'admin' || newData.child('role').val() === 'owner')"
         }
       }
     },
@@ -67,7 +67,7 @@
       "$serverId": {
         ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
         "$categoryId": {
-          ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
+          ".write": "auth != null && (root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'owner' || root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'admin')",
           ".validate": "newData.hasChildren(['name', 'position'])"
         }
       }
@@ -76,7 +76,7 @@
       "$serverId": {
         ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
         "$channelId": {
-          ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
+          ".write": "auth != null && (root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'owner' || root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'admin')",
           ".validate": "newData.hasChildren(['name', 'type', 'position'])"
         }
       }
@@ -85,14 +85,14 @@
       "$serverId": {
         ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
         "$roleId": {
-          ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()"
+          ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'owner'"
         }
       }
     },
     "invites": {
       "$code": {
         ".read": "auth != null",
-        ".write": "auth != null",
+        ".write": "auth != null && newData.child('createdBy').val() === auth.uid && root.child('serverMembers').child(newData.child('serverId').val()).child(auth.uid).exists()",
         ".validate": "newData.hasChildren(['serverId', 'createdBy', 'createdAt'])"
       }
     },
@@ -100,8 +100,9 @@
       "$serverId": {
         "$channelId": {
           ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
+          ".indexOn": ["createdAt"],
           "$messageId": {
-            ".write": "auth != null && ( !data.exists() && newData.child('authorId').val() === auth.uid || data.exists() && (data.child('authorId').val() === auth.uid || root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'owner'))",
+            ".write": "auth != null && ( !data.exists() && newData.child('authorId').val() === auth.uid && root.child('serverMembers').child($serverId).child(auth.uid).exists() || data.exists() && (data.child('authorId').val() === auth.uid || root.child('serverMembers').child($serverId).child(auth.uid).child('role').val() === 'owner'))",
             ".validate": "newData.hasChildren(['authorId', 'content', 'createdAt']) && newData.child('serverId').val() === $serverId && newData.child('channelId').val() === $channelId"
           }
         }
@@ -112,7 +113,7 @@
         "$channelId": {
           ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
           "$messageId": {
-            ".write": "auth != null && (!data.exists() && newData.child('authorId').val() === auth.uid || data.exists() && data.child('authorId').val() === auth.uid)",
+            ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists() && (!data.exists() && newData.child('authorId').val() === auth.uid || data.exists() && data.child('authorId').val() === auth.uid)",
             ".validate": "newData.hasChildren(['authorId', 'data'])"
           }
         }
@@ -223,13 +224,12 @@
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         "$inviteId": {
-          ".write": "auth != null",
+          ".write": "auth != null && newData.child('fromUid').val() === auth.uid",
           ".validate": "newData.hasChildren(['serverId', 'serverName', 'fromUid', 'fromName', 'createdAt'])"
         }
       }
     },
     "dmThreads": {
-      ".read": "auth != null",
       "$threadId": {
         ".read": "auth != null && data.child('participants').child(auth.uid).exists()",
         ".write": "auth != null && newData.child('participants').child(auth.uid).exists()",
@@ -239,6 +239,7 @@
     "dmMessages": {
       "$threadId": {
         ".read": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()",
+        ".indexOn": ["createdAt"],
         "$messageId": {
           ".write": "auth != null && !data.exists() && newData.child('authorId').val() === auth.uid",
           ".validate": "newData.hasChildren(['authorId', 'content', 'createdAt'])"

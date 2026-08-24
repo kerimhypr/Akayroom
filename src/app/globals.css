@@ -135,9 +135,9 @@ html { scroll-behavior: smooth; }
   font-family: var(--font-mono); font-weight:800; font-size:11px; letter-spacing:.06em;
   background:#fff; color:#000; line-height:1;
 }
-.brand-mark small { font-size:8px; letter-spacing:.12em; opacity:.7; }
+.brand-mark small { font-size:9px; letter-spacing:.1em; opacity:.7; }
 .rail-divider { width:32px; height:1px; background: var(--border); margin:4px 0; }
-.rail-label { font-family: var(--font-mono); font-size:8px; letter-spacing:.14em; color: var(--dim); text-transform:uppercase; margin:6px 0 2px; }
+.rail-label { font-family: var(--font-mono); font-size:9px; letter-spacing:.1em; color: var(--dim); text-transform:uppercase; margin:6px 0 2px; }
 .server-icon {
   width:48px; height:48px; border:1px solid var(--border); border-radius:12px;
   background: var(--surface-2); color: var(--text-2);
@@ -563,7 +563,7 @@ mark { background:#fff; color:#000; padding:0 2px; }
 
 /* Thread drawer */
 .thread-drawer {
-  position:absolute; top:0; right:0; bottom:0; width:360px; background: var(--surface); border-left:1px solid var(--border);
+  position:absolute; top:0; right:0; bottom:0; width:min(360px,85vw); background: var(--surface); border-left:1px solid var(--border);
   display:flex; flex-direction:column; z-index:5; box-shadow: -4px 0 0 rgba(255,255,255,.08);
 }
 .thread-head { height:48px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:#fff; color:#000; font-family: var(--font-mono); font-size:11px; font-weight:700; text-transform:uppercase; }

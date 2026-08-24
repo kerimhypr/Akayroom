@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GHOSTGRID — operator comms",
+  title: "AKAYROOM — operator comms",
   description: "Minimal brutalist comms — text, voice, presence. Single-operator, monochrome, terminal-grade.",
 };
 
