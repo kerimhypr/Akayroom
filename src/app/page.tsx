@@ -348,10 +348,20 @@ export default function Home(){
 
   const messagesEndRef=useRef<HTMLDivElement>(null);
   const typingTimeout=useRef<NodeJS.Timeout | null>(null);
+  const lastTypingSentRef=useRef<number>(0);
   const composerRef=useRef<HTMLTextAreaElement>(null);
   useEffect(()=>{ return ()=>{ if(typingTimeout.current) clearTimeout(typingTimeout.current); } },[selectedChannel]);
   const doSignOut=async()=>{
-    try{ if(user) { await remove(ref(db,`users/${user.uid}/presence/connections`)).catch(()=>{}); await set(ref(db,`users/${user.uid}/presence/status`),"offline").catch(()=>{}); } }catch{}
+    try{
+      if(user){
+        try{ onDisconnect(ref(db,`users/${user.uid}/presence/status`)).cancel(); }catch{}
+        try{ onDisconnect(ref(db,`users/${user.uid}/presence/lastChanged`)).cancel(); }catch{}
+        try{ onDisconnect(ref(db,`users/${user.uid}/presence/connections`)).cancel(); }catch{}
+        await remove(ref(db,`users/${user.uid}/presence/connections`)).catch(()=>{});
+        await set(ref(db,`users/${user.uid}/presence/status`),"offline").catch(()=>{});
+        await set(ref(db,`users/${user.uid}/presence/lastChanged`),Date.now()).catch(()=>{});
+      }
+    }catch{}
     await signOut(auth);
   };
 
@@ -402,9 +412,10 @@ export default function Home(){
       if(!u){ setProfile(null); return; }
       const snap=await get(ref(db,`users/${u.uid}/public`));
       if(snap.exists()) setProfile(snap.val());
-      const presRef=ref(db,`users/${u.uid}/presence`);
       const connId=Date.now().toString();
-      set(presRef,{status:"online",lastChanged:Date.now(),connections:{[connId]:true}}).catch(()=>{});
+      set(ref(db,`users/${u.uid}/presence/status`),"online").catch(()=>{});
+      set(ref(db,`users/${u.uid}/presence/lastChanged`),Date.now()).catch(()=>{});
+      set(ref(db,`users/${u.uid}/presence/connections/${connId}`),true).catch(()=>{});
       onDisconnect(ref(db,`users/${u.uid}/presence/status`)).set("offline").catch(()=>{});
       onDisconnect(ref(db,`users/${u.uid}/presence/lastChanged`)).set(Date.now()).catch(()=>{});
       onDisconnect(ref(db,`users/${u.uid}/presence/connections/${connId}`)).remove().catch(()=>{});
@@ -674,7 +685,9 @@ export default function Home(){
 
   useEffect(()=>{
     if(!user) return;
-    return onValue(ref(db,`friends/${user.uid}`), (snap)=>{
+    let stale=false;
+    const unsub=onValue(ref(db,`friends/${user.uid}`), (snap)=>{
+      if(stale) return;
       if(!snap.exists()){ setFriends([]); return; }
       const ids = Object.keys(snap.val() as Record<string,any>);
       void Promise.all(ids.map(async fid=>{
@@ -682,8 +695,9 @@ export default function Home(){
           const psnap = await get(ref(db,`users/${fid}/public`));
           return {uid:fid, profile: psnap.exists()? psnap.val() as UserProfile: null};
         }catch{ return {uid:fid, profile:null}; }
-      })).then(next=> setFriends(next));
+      })).then(next=>{ if(!stale) setFriends(next); });
     });
+    return ()=>{ stale=true; try{unsub();}catch{} };
   },[user]);
 
   // Listen for incoming friend requests
@@ -988,9 +1002,11 @@ export default function Home(){
     if(typeof window!=="undefined"){ try{ localStorage.setItem("akayroom_callPipPos", JSON.stringify(callPipPos)); }catch{} }
   },[callPipPos]);
 
-  // persist lastRead across sessions
+  // persist lastRead across sessions (debounced)
   useEffect(()=>{
-    if(typeof window!=="undefined"){ try{ localStorage.setItem("akayroom_lastRead", JSON.stringify(lastRead)); }catch{} }
+    if(typeof window==="undefined") return;
+    const t=setTimeout(()=>{ try{ localStorage.setItem("akayroom_lastRead", JSON.stringify(lastRead)); }catch{} }, 800);
+    return ()=>clearTimeout(t);
   },[lastRead]);
 
   // auto-dismiss flash toast after 3s
@@ -1052,9 +1068,13 @@ export default function Home(){
     if(!user || selectedServer==="demo" || !selectedChannelData || selectedChannelData.type!=="text") return;
     if(v.length===0){
       remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
+      lastTypingSentRef.current=0;
       return;
     }
-    set(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`),{username: profile?.displayName ?? profile?.username ?? username ?? "anon", timestamp: Date.now()});
+    const now=Date.now();
+    if(now - lastTypingSentRef.current < 2000) return;
+    lastTypingSentRef.current=now;
+    set(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`),{username: profile?.displayName ?? profile?.username ?? username ?? "anon", timestamp: now});
     if(typingTimeout.current) clearTimeout(typingTimeout.current);
     typingTimeout.current=setTimeout(()=>{
       remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
@@ -1493,13 +1513,16 @@ export default function Home(){
   async function joinViaInvite(){
     if(!joinCode.trim() || !user || joiningInvite) return;
     setJoiningInvite(true);
-    const code=joinCode.trim();
+    const code=joinCode.trim().toUpperCase();
     try{
       const snap=await get(ref(db,`invites/${code}`));
       if(!snap.exists()){ setToast("davet bulunamadı"); return; }
       const inv=snap.val() as any;
+      if(inv.expiresAt && Date.now() > inv.expiresAt){ setToast("davet süresi dolmuş"); return; }
+      if(inv.maxUses && (inv.uses||0) >= inv.maxUses){ setToast("davet kullanım limiti doldu"); return; }
       await set(ref(db,`serverMembers/${inv.serverId}/${user.uid}`),{role:"member",joinedAt: serverTimestamp()});
       await set(ref(db,`users/${user.uid}/servers/${inv.serverId}`), true);
+      try{ await update(ref(db,`invites/${code}`),{uses: (inv.uses||0)+1}); }catch{}
       setSelectedServer(inv.serverId);
       setActiveView("server");
       setToast("katıldın");
@@ -1750,13 +1773,16 @@ export default function Home(){
     const charset="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const gen=()=> Array.from(crypto.getRandomValues(new Uint8Array(6)), b=>charset[b%charset.length]).join('');
     let code=gen(); let tries=0;
-    while(tries<3){
+    while(tries<10){
       const snap=await get(ref(db,`invites/${code}`));
       if(!snap.exists()) break;
       code=gen(); tries++;
+      if(tries>=10){ setToast("davet oluşturulamadı, tekrar dene"); return; }
     }
-    await set(ref(db,`invites/${code}`),{serverId:selectedServer, createdBy:user.uid, createdAt:Date.now(), uses:0});
-    setInviteCode(code); setToast(`davet: ${code}`);
+    try{
+      await set(ref(db,`invites/${code}`),{serverId:selectedServer, createdBy:user.uid, createdAt:Date.now(), uses:0, maxUses: 50, expiresAt: Date.now()+7*24*60*60*1000});
+      setInviteCode(code); setToast(`davet: ${code}`);
+    }catch(e:any){ setToast(e?.message ? `davet oluşturulamadı: ${e.message.slice(0,60)}` : "davet oluşturulamadı"); }
   }
 
   // reactions: live sync from DB (fixes disappearing reactions)

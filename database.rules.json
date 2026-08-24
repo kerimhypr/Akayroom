@@ -241,7 +241,7 @@
         ".read": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()",
         ".indexOn": ["createdAt"],
         "$messageId": {
-          ".write": "auth != null && !data.exists() && newData.child('authorId').val() === auth.uid",
+          ".write": "auth != null && !data.exists() && newData.child('authorId').val() === auth.uid && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()",
           ".validate": "newData.hasChildren(['authorId', 'content', 'createdAt'])"
         }
       }
