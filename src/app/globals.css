@@ -453,8 +453,13 @@ mark { background:#fff; color:#000; padding:0 2px; }
 .account-settings-modal .modal-head { height:52px; font-size:12px; }
 .account-settings-nav button { min-height:38px; transition:background .15s, color .15s, border-color .15s; }
 .account-settings-nav button:hover { background:#fff !important; color:#000 !important; border-color:#fff !important; }
-.account-settings-modal input, .account-settings-modal textarea, .account-settings-modal select { border-color:#2d2d2d; background:#080808; }
+.account-settings-modal label { display:block; font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; color:var(--muted); font-weight:700; margin-bottom:6px; text-transform:uppercase; }
+.account-settings-modal input, .account-settings-modal textarea, .account-settings-modal select { width:100%; border-color:#2d2d2d; background:#080808; color:var(--text); padding:9px 10px; font-size:13px; font-family:var(--font-mono); border:1px solid var(--border); border-radius:0; box-sizing:border-box; }
 .account-settings-modal input:focus, .account-settings-modal textarea:focus, .account-settings-modal select:focus { outline:2px solid #fff; outline-offset:1px; }
+.account-settings-modal input:disabled { opacity:.6; }
+.account-settings-field { display:flex; flex-direction:column; }
+.account-settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+@media (max-width:560px){ .account-settings-grid{ grid-template-columns:1fr; } }
 @media (max-width:560px) {
   .account-settings-modal { flex-direction:column; max-height:92vh !important; }
   .account-settings-nav { width:100% !important; border-right:0 !important; border-bottom:1px solid var(--border); flex-direction:row !important; overflow-x:auto !important; }

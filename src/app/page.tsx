@@ -3176,36 +3176,46 @@ export default function Home(){
               <div style={{flex:1, overflow:"auto", padding:16}}>
                 {accountTab==="hesabim" && (
                   <div style={{display:"flex", flexDirection:"column", gap:14}}>
-                    <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:12, display:"flex", gap:12, alignItems:"center"}}>
-                      <div style={{width:64, height:64, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"hidden", position:"relative"}}>
+                    <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:12, display:"flex", gap:12, alignItems:"center", minWidth:0}}>
+                      <div style={{width:64, height:64, minWidth:64, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", flex:"0 0 auto"}}>
                         {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}
                         {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
                       </div>
-                      <div style={{flex:1}}>
-                        <div style={{fontWeight:700}}>{profile?.displayName}</div>
-                        <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>@{profile?.username} • {user.email}</div>
+                      <div style={{flex:1, minWidth:0, overflow:"hidden"}}>
+                        <div style={{fontWeight:700, overflowWrap:"anywhere"}}>{profile?.displayName}</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", overflowWrap:"anywhere"}}>@{profile?.username} • {user.email}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--dim)", marginTop:2}}>Katılım: {profile?.createdAt ? fmtDate(profile.createdAt) : "—"} • ID: {user.uid.slice(0,8)}…</div>
                       </div>
-                      <button className="btn" onClick={()=>{setShowAccountSettings(false); setActiveView("profile");}}>PROFİLİ DÜZENLE</button>
+                      <button className="btn" style={{flex:"0 0 auto", whiteSpace:"nowrap"}} onClick={()=>{setShowAccountSettings(false); setActiveView("profile");}}>PROFİLİ DÜZENLE</button>
                     </div>
-                    <div>
-                      <label>KULLANICI ADI</label>
-                      <input value={profile?.username ?? ""} disabled style={{opacity:.6}} />
-                      <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--dim)", marginTop:4}}>Kullanıcı adın giriş için kullanılır — değiştirilemez (Discord’da da böyle).</div>
-                      <label style={{marginTop:10}}>GÖRÜNEN İSİM</label>
-                      <input value={profile?.displayName ?? ""} onChange={e=>setProfile(p=>p?{...p, displayName:e.target.value}:p)} placeholder="operator" />
-                      <label>E-POSTA (otomatik)</label>
-                      <input value={user.email || ""} disabled style={{opacity:.6}} />
-                      <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--dim)", marginTop:4}}>E-posta = kullanıcı_adın@poseidon.local — Firebase Auth tarafından oluşturulur.</div>
-                      <label style={{marginTop:10}}>ŞİFRE DEĞİŞTİR</label>
-                      <div style={{display:"flex", gap:6}}>
-                        <input id="new-pass" type="password" placeholder="yeni şifre (6+)" style={{flex:1, background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
-                        <button className="btn" onClick={async()=>{
-                          const el=document.getElementById("new-pass") as HTMLInputElement;
-                          const v=el?.value || "";
-                          if(v.length<6){setToast("şifre 6+ olmalı"); return;}
-                          try{ const {updatePassword}=await import("firebase/auth"); await updatePassword(user, v); el.value=""; setToast("şifre güncellendi"); }catch(e:any){ setToast(e.message || "hata"); }
-                        }}>GÜNCELLE</button>
+                    <div style={{display:"flex", flexDirection:"column", gap:14}}>
+                      <div className="account-settings-field">
+                        <label>KULLANICI ADI</label>
+                        <input value={profile?.username ?? ""} disabled />
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--dim)", marginTop:4}}>Kullanıcı adın giriş için kullanılır — değiştirilemez (Discord’da da böyle).</div>
+                      </div>
+                      <div className="account-settings-grid">
+                        <div className="account-settings-field">
+                          <label>GÖRÜNEN İSİM</label>
+                          <input value={profile?.displayName ?? ""} onChange={e=>setProfile(p=>p?{...p, displayName:e.target.value}:p)} placeholder="operator" />
+                        </div>
+                        <div className="account-settings-field">
+                          <label>E-POSTA (otomatik)</label>
+                          <input value={user.email || ""} disabled />
+                        </div>
+                      </div>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--dim)", marginTop:-6}}>E-posta = kullanıcı_adın@poseidon.local — Firebase Auth tarafından oluşturulur.</div>
+                      <div className="account-settings-field">
+                        <label>ŞİFRE DEĞİŞTİR</label>
+                        <div style={{display:"flex", gap:6}}>
+                          <input id="new-pass" type="password" placeholder="yeni şifre (6+)" style={{flex:1}} />
+                          <button className="btn" style={{flex:"0 0 auto"}} onClick={async()=>{
+                            const el=document.getElementById("new-pass") as HTMLInputElement;
+                            const v=el?.value || "";
+                            if(v.length<6){setToast("şifre 6+ olmalı"); return;}
+                            try{ const {updatePassword}=await import("firebase/auth"); await updatePassword(user, v); el.value=""; setToast("şifre güncellendi"); }catch(e:any){ setToast(e.message || "hata"); }
+                          }}>GÜNCELLE</button>
+                        </div>
                       </div>
                     </div>
                     <div style={{border:"1px solid #3a0000", background:"#1a0000", padding:10}}>
