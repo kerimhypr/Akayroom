@@ -357,6 +357,20 @@ export default function Home(){
   const lastTypingSentRef=useRef<number>(0);
   const composerRef=useRef<HTMLTextAreaElement>(null);
   useEffect(()=>{ return ()=>{ if(typingTimeout.current) clearTimeout(typingTimeout.current); } },[selectedChannel]);
+  // tek müzik çalma: bir preview çalarken diğerlerini durdur
+  useEffect(()=>{
+    const onPlay=(e:Event)=>{
+      const cur=e.target as HTMLAudioElement;
+      if(!(cur instanceof HTMLAudioElement) || cur.hasAttribute("data-voice")) return;
+      document.querySelectorAll("audio").forEach(a=>{
+        if(a!==cur && !a.hasAttribute("data-voice")){
+          try{ (a as HTMLAudioElement).pause(); (a as HTMLAudioElement).currentTime=0; }catch{}
+        }
+      });
+    };
+    document.addEventListener("play", onPlay, true);
+    return ()=>document.removeEventListener("play", onPlay, true);
+  },[]);
   const doSignOut=async()=>{
     try{
       if(user){
@@ -2646,7 +2660,7 @@ export default function Home(){
                                 <div className="music-card-artist">{m.musicCard.artistName} • {m.musicCard.collectionName}</div>
                                 {m.musicCard.primaryGenre && <div className="music-card-genre">{m.musicCard.primaryGenre}</div>}
                                 <div className="music-card-actions">
-                                  {m.musicCard.previewUrl && <audio src={m.musicCard.previewUrl} controls preload="none" style={{height:28, width:"100%", maxWidth:240}}/>}
+                                  {m.musicCard.previewUrl && <audio className="music-preview" src={m.musicCard.previewUrl} controls preload="none" style={{height:28, width:"100%", maxWidth:240}} onPlay={(e)=>{ const cur=e.currentTarget; document.querySelectorAll('audio.music-preview').forEach(a=>{ if(a!==cur) { (a as HTMLAudioElement).pause(); try{(a as HTMLAudioElement).currentTime=0;}catch{} } }); }}/>}
                                   <a href={m.musicCard.trackViewUrl} target="_blank" rel="noopener noreferrer" className="btn" style={{fontSize:9, padding:"4px 8px"}}>Apple Music →</a>
                                 </div>
                               </div>
@@ -3454,7 +3468,7 @@ export default function Home(){
                         <div style={{fontSize:12, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{selectedProfile.nowPlaying.track}</div>
                         <div style={{fontSize:11, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{selectedProfile.nowPlaying.artist}{selectedProfile.nowPlaying.genre?` • ${selectedProfile.nowPlaying.genre}`:""}</div>
                       </div>
-                      {selectedProfile.nowPlaying.previewUrl && <audio src={selectedProfile.nowPlaying.previewUrl} controls preload="none" style={{height:28, width:100}}/>}
+                      {selectedProfile.nowPlaying.previewUrl && <audio className="music-preview" src={selectedProfile.nowPlaying.previewUrl} controls preload="none" style={{height:28, width:100}} onPlay={(e)=>{ const cur=e.currentTarget; document.querySelectorAll('audio.music-preview').forEach(a=>{ if(a!==cur) { (a as HTMLAudioElement).pause(); try{(a as HTMLAudioElement).currentTime=0;}catch{} } }); }}/>}
                     </div>
                   )}
                   {selectedProfile.bio ? <div style={{marginTop:10, border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, fontSize:12, lineHeight:1.6, whiteSpace:"pre-wrap"}}><RenderContent text={selectedProfile.bio}/></div> : <div style={{marginTop:10, fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", border:"1px dashed var(--border)", padding:8, textAlign:"center"}}>bio yok</div>}
