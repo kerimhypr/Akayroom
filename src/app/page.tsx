@@ -103,6 +103,7 @@ function Icon({name, size=14}: {name: string, size?: number}){
     close: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
     github: <><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></>,
     music: <><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>,
+    paperclip: <><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></>,
   };
   return <svg {...common}>{paths[name] ?? paths.hash}</svg>;
 }
@@ -2006,7 +2007,7 @@ export default function Home(){
         <button className={`server-icon dm ${activeView==="friends"?"active":""}`} onClick={()=>setActiveView("friends")} title="Arkadaşlar"><span className="icon"><Icon name="users"/></span>{(Object.keys(friendRequests).length > 0 || Object.keys(incomingServerInvites).length > 0) && <span className="unread-badge rail-badge">{Object.keys(friendRequests).length + Object.keys(incomingServerInvites).length}</span>}</button>
         <div className="rail-divider" style={{marginTop:8}}/>
         <div style={{flex:1}}/>
-        <button onClick={()=>setActiveView("profile")} style={{width:44, height:44, border:"1px solid var(--border)", background: (activeView as any)==="profile" ? "#fff" : "#111", color: (activeView as any)==="profile" ? "#000" : "#fff", display:"grid", placeItems:"center", overflow:"visible", flex:"0 0 auto", position:"relative", borderRadius:"50%"}} title="Profil">
+        <button onClick={()=>setActiveView("profile")} style={{width:44, height:44, border:"1px solid var(--border)", background: (activeView as any)==="profile" ? "var(--accent)" : "var(--surface-3)", color: (activeView as any)==="profile" ? "var(--accent-fg)" : "var(--text)", display:"grid", placeItems:"center", overflow:"visible", flex:"0 0 auto", position:"relative", borderRadius:"50%", transition:"all .2s var(--ease)"}} title="Profil">
           <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
           {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
         </button>
@@ -2038,8 +2039,8 @@ export default function Home(){
               {isDemo ? <strong>AKAYROOM</strong> : <strong>{selectedServerData?.name}</strong>}
               {!isDemo && (()=>{ const myRole=members.find(m=>m.uid===user?.uid)?.role; const canManage=myRole==="owner"||myRole==="admin"; return (
                 <div style={{display:"flex", gap:6}}>
-                  <button onClick={()=>setShowMembers(v=>!v)} title="Üyeler" style={{width:26,height:26,border:"1px solid var(--border)",background: showMembers?"#fff":"transparent",color: showMembers?"#000":"var(--muted)",display:"grid",placeItems:"center"}}>◫</button>
-                  {canManage && <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları" style={{width:26,height:26,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",display:"grid",placeItems:"center"}}>⚙</button>}
+                  <button onClick={()=>setShowMembers(v=>!v)} title="Üyeler" style={{width:26,height:26,border:"1px solid var(--border)",background: showMembers?"var(--accent)":"transparent",color: showMembers?"var(--accent-fg)":"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)"}}><span className="icon"><Icon name="users" size={13}/></span></button>
+                  {canManage && <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları" style={{width:26,height:26,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)"}}><span className="icon"><Icon name="settings" size={13}/></span></button>}
                 </div>
               );})()}
             </div>
@@ -2062,7 +2063,7 @@ export default function Home(){
                     if(chans.length===0) return null;
                     return (
                       <div key={cat.id}>
-                        <div className="category-label">{cat.name} {(()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; return ok ? <span onClick={()=>setShowCreateChannel(true)}>＋</span> : null;})()}</div>
+                        <div className="category-label">{cat.name} {(()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; return ok ? <span onClick={()=>setShowCreateChannel(true)}><span className="icon"><Icon name="plus" size={12}/></span></span> : null;})()}</div>
                         {chans.map(ch=>(
                           <div key={ch.id} style={{position:"relative"}}>
                             <button
@@ -2105,7 +2106,7 @@ export default function Home(){
                   <div className="cu-meta">
                     <strong>{profile?.displayName ?? username}</strong>
                     <small>@{profile?.username ?? username}</small>
-                    {profile?.nowPlaying && <small style={{color:"#1DB954", display:"flex", alignItems:"center", gap:3, marginTop:2}}><span>♪</span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{profile.nowPlaying.track}</span></small>}
+                    {profile?.nowPlaying && <small style={{color:"var(--spotify)", display:"flex", alignItems:"center", gap:4, marginTop:2}}><span className="icon"><Icon name="music" size={10}/></span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{profile.nowPlaying.track}</span></small>}
                   </div>
                   <div className="cu-actions">
                     <button onClick={()=>setShowAccountSettings(true)} title="Kullanıcı Ayarları"><span className="icon"><Icon name="settings"/></span></button>
@@ -2125,7 +2126,7 @@ export default function Home(){
               <button className="channel-row" onClick={()=>setActiveView("friends")}><span className="ch-icon"><span className="icon"><Icon name="users"/></span></span><span className="ch-name">Arkadaşlar</span></button>
               <div style={{marginTop:16, border:"1px solid var(--border)", padding:10, background:"var(--surface-2)"}}>
                 <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:6}}>PROFİL FOTOĞRAFI</div>
-                <div style={{width:64, height:64, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"visible", marginBottom:8, position:"relative", borderRadius:"50%"}}>
+                <div style={{width:64, height:64, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", marginBottom:8, position:"relative", borderRadius:"50%"}}>
                   <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}</div>
                   {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none"}}/>}
                 </div>
@@ -2170,7 +2171,7 @@ export default function Home(){
                     </div>
                   ) : Object.entries(friendRequests).map(([fid, req])=>(
                     <div key={fid} style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, marginBottom:8, display:"flex", alignItems:"center", gap:8}}>
-                      <button className="avatar" onClick={()=>openProfile(fid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111"}}>{initials(req.fromName || "??")}</button>
+                      <button className="avatar" onClick={()=>openProfile(fid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)"}}>{initials(req.fromName || "??")}</button>
                       <div style={{flex:1, minWidth:0}}>
                         <div style={{fontSize:13, fontWeight:600}}>{req.fromName || "kullanıcı"}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>{fmtTime(req.createdAt)}</div>
@@ -2182,7 +2183,7 @@ export default function Home(){
                   <div className="category-label" style={{display:"flex", alignItems:"center", gap:6, marginTop:6}}>SUNUCU DAVETLERİ {Object.keys(incomingServerInvites).length>0 && <span className="unread-badge">{Object.keys(incomingServerInvites).length}</span>}</div>
                   {Object.entries(incomingServerInvites).map(([invId, inv])=>(
                     <div key={invId} style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, marginBottom:8, display:"flex", alignItems:"center", gap:8}}>
-                      <div style={{width:28, height:28, display:"grid", placeItems:"center", border:"1px solid var(--border)", background:"#000", color:"#fff"}}><span className="icon"><Icon name="grid" size={13}/></span></div>
+                      <div style={{width:28, height:28, display:"grid", placeItems:"center", border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)"}}><span className="icon"><Icon name="grid" size={13}/></span></div>
                       <div style={{flex:1, minWidth:0}}>
                         <div style={{fontSize:13, fontWeight:600}}>{inv.serverName}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>{inv.fromName || "biri"} seni davet etti</div>
@@ -2210,7 +2211,7 @@ export default function Home(){
                 <>
                     <div className="category-label" style={{marginBottom:8}}>ARKADAŞ EKLE</div>
                     <div style={{display:"flex", gap:6}}>
-                      <input value={friendName} onChange={e=>setFriendName(e.target.value)} placeholder="kullanici_adi" style={{flex:1, background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                      <input value={friendName} onChange={e=>setFriendName(e.target.value)} placeholder="kullanici_adi" style={{flex:1, background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
                       <button className="btn btn-primary" onClick={async()=>{
                         const clean = friendName.trim().toLowerCase();
                         if(!clean) return;
@@ -2229,14 +2230,14 @@ export default function Home(){
                     </div>
                   ) : friends.map(f=>(
                     <div key={f.uid} className="friend-row" style={{cursor:"pointer"}} onClick={()=>openProfile(f.uid)}>
-                      <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                      <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
                       <div style={{flex:1, minWidth:0}}>
                         <div data-friend-name style={{fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
                       </div>
                       <button className="friend-mini-btn" title="Mesaj" onClick={(e)=>{e.stopPropagation(); startDM(f.uid);}}><span className="icon"><Icon name="dm" size={12}/></span></button>
                       <button className="friend-mini-btn" title="Sunucuya davet et" onClick={(e)=>{e.stopPropagation(); void inviteFriendToServer(f.uid);}}><span className="icon"><Icon name="invite" size={12}/></span></button>
-                      <button className="friend-mini-btn" style={{color:"#ff3b30"}} title="Arkadaşlıktan çıkar" onClick={(e)=>{e.stopPropagation(); void removeFriend(f.uid);}}>✕</button>
+                      <button className="friend-mini-btn" style={{color:"var(--danger)"}} title="Arkadaşlıktan çıkar" onClick={(e)=>{e.stopPropagation(); void removeFriend(f.uid);}}><span className="icon"><Icon name="close" size={12}/></span></button>
                     </div>
                   ))}
                 </>
@@ -2266,7 +2267,7 @@ export default function Home(){
           <>
             <header className="chat-header">
               <div className="channel-heading"><span className="hash">◈</span><strong>SUNUCU MERKEZİ</strong><span className="topic">sunucularını yönet ve katıl</span></div>
-              <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("server")}>←</button></div>
+              <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("server")}><span className="icon"><Icon name="arrowLeft" size={14}/></span></button></div>
             </header>
             <div className="message-area" style={{padding:16, overflow:"auto"}}>
               <div style={{maxWidth:640, margin:"0 auto", width:"100%", display:"flex", flexDirection:"column", gap:12}}>
@@ -2305,24 +2306,24 @@ export default function Home(){
                   {/* Banner + Avatar Card */}
                   <div style={{border:"1px solid var(--border)", background:"var(--surface)", overflow:"visible"}}>
                     <div style={{height:112, position:"relative", borderBottom:"1px solid var(--border)", background: profile?.bannerUrl ? `url(${profile.bannerUrl}) center/cover` : (profile?.bannerColor || "#fff"), overflow:"visible"}}>
-                      {!profile?.bannerUrl && <div style={{position:"absolute", inset:0, backgroundImage:"linear-gradient(to right, #111 1px, transparent 1px), linear-gradient(to bottom, #111 1px, transparent 1px)", backgroundSize:"20px 20px", opacity: profile?.bannerColor ? .15 : .9}}/>}
+                      {!profile?.bannerUrl && <div style={{position:"absolute", inset:0, backgroundImage:"linear-gradient(to right, var(--border) 1px, transparent 1px), linear-gradient(to bottom, var(--border) 1px, transparent 1px)", backgroundSize:"20px 20px", opacity: profile?.bannerColor ? .15 : .9}}/>}
                       {!profile?.bannerUrl && <div style={{position:"absolute", inset:0, opacity:.06, background:"repeating-linear-gradient(45deg, #000 0 8px, transparent 8px 16px)"}}/>}
                       <div style={{position:"absolute", top:8, right:8, display:"flex", gap:6}}>
-                        <label style={{border:"1px solid #000", background:"rgba(0,0,0,.7)", color:"#fff", padding:"5px 8px", fontFamily:"var(--font-mono)", fontSize:10, cursor:"pointer", backdropFilter:"blur(4px)"}}>
+                        <label style={{border:"1px solid #000", background:"rgba(0,0,0,.7)", color:"var(--text)", padding:"5px 8px", fontFamily:"var(--font-mono)", fontSize:10, cursor:"pointer", backdropFilter:"blur(4px)"}}>
                           BANNER
                           <input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0]; if(f) handleBannerFile(f);}} />
                         </label>
                       </div>
                       <div style={{position:"absolute", left:16, bottom:-30, display:"flex", alignItems:"flex-end", gap:10}}>
-                        <div style={{width:76, height:76, border:"2px solid #fff", background:"#000", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)", position:"relative", zIndex:2}}>
+                        <div style={{width:76, height:76, border:"2px solid var(--accent)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)", position:"relative", zIndex:2}}>
                           <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800, fontSize:20}}>{initials(profile?.displayName ?? username)}</span>}</div>
                           {/* decoration - image or border */}
-                          {profile?.decoration && (profile.decoration.startsWith("http") ? <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/> : <div style={{position:"absolute", inset:-2, border:"2px solid #fff", borderRadius: profile.decoration==="circle" ? "50%" : "0", pointerEvents:"none"}}/>)}
-                          <div style={{position:"absolute", right:0, bottom:0, width:14, height:14, border:"2px solid var(--surface)", background: profile?.status==="online" ? "#23a559" : profile?.status==="idle" ? "#f0b132" : profile?.status==="dnd" ? "#f23f42" : "#80848e", borderRadius:"50%", boxShadow:"0 1px 2px rgba(0,0,0,.3)"}}/>
+                          {profile?.decoration && (profile.decoration.startsWith("http") ? <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/> : <div style={{position:"absolute", inset:-2, border:"2px solid var(--accent)", borderRadius: profile.decoration==="circle" ? "50%" : "0", pointerEvents:"none"}}/>)}
+                          <div style={{position:"absolute", right:0, bottom:0, width:14, height:14, border:"2px solid var(--surface)", background: profile?.status==="online" ? "var(--online)" : profile?.status==="idle" ? "var(--idle)" : profile?.status==="dnd" ? "var(--dnd)" : "var(--offline)", borderRadius:"50%", boxShadow:"0 1px 2px rgba(0,0,0,.3)"}}/>
                         </div>
                         <div style={{marginBottom:4, display:"flex", gap:4, flexWrap:"wrap"}}>
-                          {(profile?.badges||[]).map(b=> <span key={b} style={{border:"1px solid #000", background:"#fff", color:"#000", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700, padding:"2px 6px", letterSpacing:".04em"}}>{b}</span>)}
-                          {(!profile?.badges || profile.badges.length===0) && <span style={{border:"1px dashed var(--border)", background:"rgba(0,0,0,.5)", color:"#fff", fontFamily:"var(--font-mono)", fontSize:9, padding:"2px 6px"}}>ROZET YOK</span>}
+                          {(profile?.badges||[]).map(b=> <span key={b} style={{border:"1px solid #000", background:"var(--accent)", color:"var(--accent-fg)", fontFamily:"var(--font-mono)", fontSize:10.5, fontWeight:700, padding:"2px 6px", letterSpacing:".04em"}}>{b}</span>)}
+                          {(!profile?.badges || profile.badges.length===0) && <span style={{border:"1px dashed var(--border)", background:"rgba(0,0,0,.5)", color:"var(--text)", fontFamily:"var(--font-mono)", fontSize:10.5, padding:"2px 6px"}}>ROZET YOK</span>}
                         </div>
                       </div>
                     </div>
@@ -2332,7 +2333,7 @@ export default function Home(){
                           <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
                             <span style={{fontWeight:800, fontSize:18, letterSpacing:"-.02em"}}>{profile?.displayName}</span>
                             {profile?.pronouns && <span style={{border:"1px solid var(--border)", background:"var(--surface-2)", fontFamily:"var(--font-mono)", fontSize:10, padding:"2px 6px", color:"var(--muted)"}}>{profile.pronouns}</span>}
-                            {profile?.title && <span style={{border:"1px solid #fff", background:"#fff", color:"#000", fontFamily:"var(--font-mono)", fontSize:10, fontWeight:700, padding:"2px 6px"}}>{profile.title}</span>}
+                            {profile?.title && <span style={{border:"1px solid var(--accent)", background:"var(--accent)", color:"var(--accent-fg)", fontFamily:"var(--font-mono)", fontSize:10, fontWeight:700, padding:"2px 6px"}}>{profile.title}</span>}
                             {profile?.accentColor && <span style={{width:10, height:10, border:"1px solid var(--border)", background: profile.accentColor, display:"inline-block"}}/>}
                           </div>
                           <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", marginTop:2}}>@{profile?.username} • {profile?.customStatusEmoji || ""} {profile?.customStatus || profile?.statusText || "durum yok"}</div>
@@ -2348,12 +2349,12 @@ export default function Home(){
                         {profile?.bio ? <div style={{fontSize:13, lineHeight:1.6, whiteSpace:"pre-wrap"}}><RenderContent text={profile.bio}/></div> : <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>henüz bio yok — Discord’daki gibi kendinden bahset, markdown desteklenir (**kalın**, `kod`, emoji).</div>}
                       </div>
                       <div style={{marginTop:10, display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8}}>
-                        <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)", letterSpacing:".06em"}}>KATILIM</div><div style={{fontWeight:700, fontSize:11, marginTop:4}}>{profile?.createdAt ? fmtDate(profile.createdAt) : "—"}</div></div>
-                        <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>SUNUCU</div><div style={{fontWeight:800, fontSize:14}}>{Object.keys(myServerIds).length}</div></div>
-                        <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>ARKADAŞ</div><div style={{fontWeight:800, fontSize:14}}>{friends.length}</div></div>
+                        <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--muted)", letterSpacing:".06em"}}>KATILIM</div><div style={{fontWeight:700, fontSize:11, marginTop:4}}>{profile?.createdAt ? fmtDate(profile.createdAt) : "—"}</div></div>
+                        <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--muted)"}}>SUNUCU</div><div style={{fontWeight:800, fontSize:14}}>{Object.keys(myServerIds).length}</div></div>
+                        <div style={{border:"1px solid var(--border)", padding:10, textAlign:"center"}}><div style={{fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--muted)"}}>ARKADAŞ</div><div style={{fontWeight:800, fontSize:14}}>{friends.length}</div></div>
                       </div>
-                      <div style={{marginTop:10, border:"1px solid var(--border)", background:"#000", padding:10, display:"flex", gap:8, alignItems:"center"}}>
-                        <div style={{width:28, height:28, border:"1px solid var(--border)", display:"grid", placeItems:"center", background:"#111"}}><Icon name="grid"/></div>
+                      <div style={{marginTop:10, border:"1px solid var(--border)", background:"var(--bg)", padding:10, display:"flex", gap:8, alignItems:"center"}}>
+                        <div style={{width:28, height:28, border:"1px solid var(--border)", display:"grid", placeItems:"center", background:"var(--surface-3)"}}><Icon name="grid"/></div>
                         {(()=>{ const cn=profile?.connections||{}; const items=[
                           cn.github ? {k:"GITHUB", href: cn.github.startsWith("http")?cn.github:`https://github.com/${cn.github.replace(/^@/,"")}`} : null,
                           cn.spotify ? {k:"SPOTIFY", href: cn.spotify.startsWith("http")?cn.spotify:`https://open.spotify.com/search/${encodeURIComponent(cn.spotify)}`} : null,
@@ -2365,7 +2366,7 @@ export default function Home(){
                             {items.length ? (
                               <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:4}}>
                                 {items.map(it=>(
-                                  <a key={it.k} href={it.href} target="_blank" rel="noreferrer" style={{border:"1px solid #fff", background:"#fff", color:"#000", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700, padding:"3px 8px", textDecoration:"none"}}>{it.k} ↗</a>
+                                  <a key={it.k} href={it.href} target="_blank" rel="noreferrer" style={{border:"1px solid var(--accent)", background:"var(--accent)", color:"var(--accent-fg)", fontFamily:"var(--font-mono)", fontSize:10.5, fontWeight:700, padding:"3px 8px", textDecoration:"none"}}>{it.k} ↗</a>
                                 ))}
                               </div>
                             ) : (
@@ -2392,7 +2393,7 @@ export default function Home(){
             <>
               <header className="chat-header">
                 <div className="channel-heading"><span className="hash"><span className="icon"><Icon name="dm"/></span></span><strong>{dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName || "MESAJLAR"}</strong><span className="topic">uçtan uca • RTDB</span></div>
-                <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("friends")} title="Arkadaşlara dön">←</button><div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{void startDMCall();}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid #fff":"1px solid var(--border)",background:joinedVoice===selectedDm?"#fff":"transparent",color:joinedVoice===selectedDm?"#000":"var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button></div>
+                <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("friends")} title="Arkadaşlara dön"><span className="icon"><Icon name="arrowLeft" size={14}/></span></button><div className="header-search"><span className="icon" style={{display:"grid", color:"var(--muted)"}}><Icon name="search" size={12}/></span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="DM'de ara"/></div><button onClick={()=>{void startDMCall();}} title="DM sesli arama" style={{border:joinedVoice===selectedDm?"1px solid var(--accent)":"1px solid var(--border)",background:joinedVoice===selectedDm?"var(--accent)":"transparent",color:joinedVoice===selectedDm?"var(--accent-fg)":"var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button></div>
               </header>
               <div className="message-area" style={{padding:16}}>
                 {!selectedDm ? (
@@ -2405,7 +2406,7 @@ export default function Home(){
                       <div className="dm-search-panel">
                         <div className="dm-search-head">
                           <span>{dmSearchResults.length} SONUÇ BULUNDU — &ldquo;{search.trim().slice(0,24)}{search.trim().length>24?"…":""}&rdquo;</span>
-                          <button onClick={()=>setSearch("")}>✕ TEMİZLE</button>
+                          <button onClick={()=>setSearch("")}><span className="icon"><Icon name="close" size={11}/></span> TEMİZLE</button>
                         </div>
                         <div className="dm-search-results">
                           {dmSearchResults.length===0 ? (
@@ -2430,7 +2431,7 @@ export default function Home(){
                     {dmMsgs.map(m=>(
                   <div key={m.id} id={`dm-msg-${m.id}`} className={`message-row ${dmHighlightId===m.id ? "msg-flash" : ""}`} style={{maxWidth:760, margin:"0 auto", width:"100%"}}>
                     <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorId===user.uid ? (profile?.displayName||username) : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"??"))}</button>
-                    <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)} {m.editedAt?"(düzenlendi)":""}</span></div>{dmEditingId===m.id ? <div style={{display:"flex",gap:6}}><input value={dmEditContent} onChange={e=>setDmEditContent(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void saveDMEdit();if(e.key==="Escape")setDmEditingId(null)}} autoFocus style={{flex:1,background:"#000",border:"1px solid #fff",color:"#fff",padding:6}}/><button className="btn btn-primary" onClick={()=>void saveDMEdit()}>KAYDET</button><button className="btn" onClick={()=>setDmEditingId(null)}>İPTAL</button></div> : <><div className="msg-content">{m.content}</div>{m.attachment && (()=>{const c=dmAttachmentCache[m.id]; return c?.dataUrl ? (m.attachment.type==="image" ? <img src={c.dataUrl} alt={m.attachment.name} style={{marginTop:6,maxWidth:"100%",maxHeight:340,objectFit:"contain",display:"block"}}/> : m.attachment.type==="video" ? <video src={c.dataUrl} controls style={{marginTop:6,maxWidth:"100%",maxHeight:360,display:"block"}}/> : m.attachment.type==="audio" ? <audio src={c.dataUrl} controls style={{marginTop:6,width:"100%"}}/> : <a href={c.dataUrl} download={m.attachment.name} className="btn" style={{display:"inline-block",marginTop:6}}>⎘ {m.attachment.name}</a>) : <button className="btn" style={{marginTop:6}} onClick={()=>loadDmAttachment(m)} disabled={c?.loading}>{c?.loading?"yükleniyor…":`📎 ${m.attachment.name} (${fmtSize(m.attachment.size)}) — aç`}</button>;})()}</>} {m.authorId===user.uid && <div className="msg-actions"><button onClick={()=>{setDmEditingId(m.id);setDmEditContent(m.content)}}>✎</button><button onClick={()=>void deleteDMMessage(m.id)}>⌫</button></div>}</div>
+                    <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)} {m.editedAt?"(düzenlendi)":""}</span></div>{dmEditingId===m.id ? <div style={{display:"flex",gap:6}}><input value={dmEditContent} onChange={e=>setDmEditContent(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void saveDMEdit();if(e.key==="Escape")setDmEditingId(null)}} autoFocus style={{flex:1,background:"var(--bg)",border:"1px solid var(--accent)",color:"var(--text)",padding:6}}/><button className="btn btn-primary" onClick={()=>void saveDMEdit()}>KAYDET</button><button className="btn" onClick={()=>setDmEditingId(null)}>İPTAL</button></div> : <><div className="msg-content">{m.content}</div>{m.attachment && (()=>{const c=dmAttachmentCache[m.id]; return c?.dataUrl ? (m.attachment.type==="image" ? <img src={c.dataUrl} alt={m.attachment.name} style={{marginTop:6,maxWidth:"100%",maxHeight:340,objectFit:"contain",display:"block"}}/> : m.attachment.type==="video" ? <video src={c.dataUrl} controls style={{marginTop:6,maxWidth:"100%",maxHeight:360,display:"block"}}/> : m.attachment.type==="audio" ? <audio src={c.dataUrl} controls style={{marginTop:6,width:"100%"}}/> : <a href={c.dataUrl} download={m.attachment.name} className="btn" style={{display:"inline-block",marginTop:6}}>⎘ {m.attachment.name}</a>) : <button className="btn" style={{marginTop:6}} onClick={()=>loadDmAttachment(m)} disabled={c?.loading}>{c?.loading?"yükleniyor…":<><span className="icon"><Icon name="paperclip" size={11}/></span> {m.attachment.name} ({fmtSize(m.attachment.size)}) — aç</>}</button>;})()}</>} {m.authorId===user.uid && <div className="msg-actions"><button onClick={()=>{setDmEditingId(m.id);setDmEditContent(m.content)}}><span className="icon"><Icon name="edit" size={13}/></span></button><button onClick={()=>void deleteDMMessage(m.id)}><span className="icon"><Icon name="trash" size={13}/></span></button></div>}</div>
                   </div>
                     ))}
                   </>
@@ -2438,9 +2439,9 @@ export default function Home(){
               </div>
               {selectedDm && (
                 <div className="composer-wrap">
-                  {dmPendingFile && <div style={{border:"1px solid var(--border)",background:"var(--surface-2)",padding:"6px 8px",marginBottom:6,display:"flex",alignItems:"center",gap:8}}><span style={{flex:1,fontFamily:"var(--font-mono)",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📎 {dmPendingFile.file.name} ({fmtSize(dmPendingFile.file.size)})</span><button onClick={()=>setDmPendingFile(null)} style={{border:"1px solid var(--border)",background:"transparent"}}>✕</button></div>}
+                  {dmPendingFile && <div style={{border:"1px solid var(--border)",background:"var(--surface-2)",padding:"6px 8px",marginBottom:6,display:"flex",alignItems:"center",gap:8}}><span style={{flex:1,fontFamily:"var(--font-mono)",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}><span className="icon"><Icon name="paperclip" size={12}/></span>{dmPendingFile.file.name} ({fmtSize(dmPendingFile.file.size)})</span><button onClick={()=>setDmPendingFile(null)} style={{border:"1px solid var(--border)",background:"transparent"}}><span className="icon"><Icon name="close" size={12}/></span></button></div>}
                   <form className="composer" onSubmit={e=>{e.preventDefault(); void sendDMMessage();}} style={{alignItems:"center"}}>
-                    <label className="composer-plus" title="DM dosyası ekle" style={{cursor:"pointer",display:"grid",placeItems:"center"}}>＋<input type="file" hidden accept="image/*,video/*,audio/*,.pdf,.zip,.txt,.doc,.docx" onChange={e=>{const f=e.target.files?.[0];if(f)handleDmFile(f);e.currentTarget.value="";}}/></label>
+                    <label className="composer-plus" title="DM dosyası ekle" style={{cursor:"pointer",display:"grid",placeItems:"center"}}><span className="icon"><Icon name="plus" size={16}/></span><input type="file" hidden accept="image/*,video/*,audio/*,.pdf,.zip,.txt,.doc,.docx" onChange={e=>{const f=e.target.files?.[0];if(f)handleDmFile(f);e.currentTarget.value="";}}/></label>
                     <textarea value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendDMMessage();}}} placeholder="mesaj yaz — dosya veya fotoğraf ekle" rows={1} className="composer-input" style={{minHeight:24, maxHeight:80}}/>
                     <button type="submit" className="send-button" disabled={!dmDraft.trim()&&!dmPendingFile}><span className="icon"><Icon name="send"/></span></button>
                   </form>
@@ -2451,7 +2452,7 @@ export default function Home(){
             <>
               <header className="chat-header">
                 <div className="channel-heading"><span className="hash">◉</span><strong>ARKADAŞLAR</strong><span className="topic">{friends.length} kişi</span></div>
-                <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("server")}>←</button></div>
+                <div className="header-actions"><button className="header-back" onClick={()=>setActiveView("server")}><span className="icon"><Icon name="arrowLeft" size={14}/></span></button></div>
               </header>
               <div className="page-panel">
                 {friends.length===0 ? (
@@ -2464,14 +2465,14 @@ export default function Home(){
                   <div style={{maxWidth:560, margin:"0 auto", width:"100%"}}>
                     {friends.map(f=>(
                       <div key={f.uid} className="friend-row" style={{cursor:"pointer"}} onClick={()=>openProfile(f.uid)}>
-                        <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                        <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
                         <div style={{flex:1, minWidth:0}}>
                           <div data-friend-name style={{fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username}</div>
                           <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
                         </div>
                         <button className="btn" onClick={(e)=>{e.stopPropagation(); startDM(f.uid);}}><span className="icon"><Icon name="dm" size={12}/></span> MESAJ</button>
                         <button className="btn" onClick={(e)=>{e.stopPropagation(); void inviteFriendToServer(f.uid);}} title="Sunucuya davet et">DAVET</button>
-                        <button className="btn" style={{color:"#ff3b30"}} onClick={(e)=>{e.stopPropagation(); void removeFriend(f.uid);}} title="Arkadaşlıktan çıkar">ÇIKAR</button>
+                        <button className="btn" style={{color:"var(--danger)"}} onClick={(e)=>{e.stopPropagation(); void removeFriend(f.uid);}} title="Arkadaşlıktan çıkar">ÇIKAR</button>
                       </div>
                     ))}
                   </div>
@@ -2511,11 +2512,11 @@ export default function Home(){
                 {!isDemo && <span className="topic">{selectedChannelData?.topic ?? ""}</span>}
               </div>
               <div className="header-actions">
-                <div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ara" /></div>
-                <button onClick={startCall} title="Sesli arama başlat" style={{border: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "1px solid #fff" : "1px solid var(--border)", background: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#fff" : "transparent", color: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#000" : "var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button>
+                <div className="header-search"><span className="icon" style={{display:"grid", color:"var(--muted)"}}><Icon name="search" size={12}/></span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ara" /></div>
+                <button onClick={startCall} title="Sesli arama başlat" style={{border: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "1px solid var(--accent)" : "1px solid var(--border)", background: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "var(--accent)" : "transparent", color: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "var(--accent-fg)" : "var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button>
                 {(()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; if(!ok) return null; return (<>
                   <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo"){ setEditingChannel(selectedChannelData); setEditChannelName(selectedChannelData.name); setEditChannelTopic(selectedChannelData.topic||""); } }} title="Kanalı Düzenle"><span className="icon"><Icon name="edit" size={12}/></span></button>
-                  <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"#ff3b30"}}><span className="icon"><Icon name="trash" size={12}/></span></button>
+                  <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"var(--danger)"}}><span className="icon"><Icon name="trash" size={12}/></span></button>
                   <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları"><span className="icon"><Icon name="settings" size={12}/></span></button>
                 </>);})()}
                 <button onClick={()=>setShowPalette(true)}>⌘K</button>
@@ -2524,10 +2525,10 @@ export default function Home(){
 
             <div className="message-area" onClick={()=>{setShowEmoji(false); setShowGif(false); setShowPlusMenu(false);}}>
               {helpOpen && (
-                <div style={{margin:"10px 16px", border:"1px solid #fff", background:"var(--surface)", padding:12, alignSelf:"center", width:"min(440px, 92%)"}} onClick={e=>e.stopPropagation()}>
+                <div style={{margin:"10px 16px", border:"1px solid var(--accent)", background:"var(--surface)", padding:12, alignSelf:"center", width:"min(440px, 92%)"}} onClick={e=>e.stopPropagation()}>
                   <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
                     <strong style={{fontFamily:"var(--font-mono)", fontSize:12, letterSpacing:".08em"}}>KOMUTLAR</strong>
-                    <button onClick={()=>setHelpOpen(false)} style={{border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", width:22, height:22}}>✕</button>
+                    <button onClick={()=>setHelpOpen(false)} style={{border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", width:22, height:22}}><span className="icon"><Icon name="close" size={12}/></span></button>
                   </div>
                   {[
                     ["/help","bu paneli açar"],
@@ -2590,7 +2591,7 @@ export default function Home(){
                           {m.replyTo && <div className="msg-reply"><strong>{m.replyTo.authorName}</strong> {m.replyTo.content}</div>}
                           {isEditing ? (
                             <div style={{display:"flex", gap:6, marginTop:4}}>
-                              <input value={editContent} onChange={e=>setEditContent(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") editMessage(); if(e.key==="Escape") setEditingId(null); }} style={{flex:1, background:"#000", border:"1px solid #fff", color:"#fff", padding:"6px", fontSize:13}} autoFocus />
+                              <input value={editContent} onChange={e=>setEditContent(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") editMessage(); if(e.key==="Escape") setEditingId(null); }} style={{flex:1, background:"var(--bg)", border:"1px solid var(--accent)", color:"var(--text)", padding:"6px", fontSize:13}} autoFocus />
                               <button className="btn btn-primary" onClick={editMessage}>KAYDET</button><button className="btn" onClick={()=>setEditingId(null)}>İPTAL</button>
                             </div>
                           ) : (
@@ -2617,11 +2618,11 @@ export default function Home(){
                               return c?.dataUrl ? (
                                 <audio src={c.dataUrl} controls style={{marginTop:6, width:"100%", display:"block"}}/>
                               ) : (
-                                <button style={{marginTop:6}} className="btn" onClick={()=>loadAttachment(m)} disabled={c?.loading}>{c?.loading ? "yükleniyor…" : `♪ ${meta.name} (${fmtSize(meta.size)})`}</button>
+                                <button style={{marginTop:6}} className="btn" onClick={()=>loadAttachment(m)} disabled={c?.loading}>{c?.loading ? "yükleniyor…" : <><span className="icon"><Icon name="music" size={11}/></span> {meta.name} ({fmtSize(meta.size)})</>}</button>
                               );
                             }
                             return c?.error ? (
-                              <div style={{marginTop:6, fontFamily:"var(--font-mono)", fontSize:10, color:"#f23f42", border:"1px dashed var(--border)", padding:"4px 8px", display:"inline-block"}}>{c.error}</div>
+                              <div style={{marginTop:6, fontFamily:"var(--font-mono)", fontSize:10, color:"var(--danger)", border:"1px dashed var(--border)", padding:"4px 8px", display:"inline-block", borderRadius:"var(--r-xs)"}}>{c.error}</div>
                             ) : (
                               <button style={{marginTop:6}} className="btn" onClick={()=>downloadAttachment(m)} disabled={c?.loading}>⎘ {c?.loading ? "hazırlanıyor…" : `${meta.name} (${fmtSize(meta.size)}) — indir`}</button>
                             );
@@ -2641,7 +2642,7 @@ export default function Home(){
                                   const n=counts[o.id]||0;
                                   const pct= total>0 ? Math.round((n/total)*100) : 0;
                                   return (
-                                    <div key={o.id} className="poll-option" style={myVote===o.id?{borderColor:"#fff", background:"#111"}:undefined} onClick={()=>castVote(poll.id,o.id)}>
+                                    <div key={o.id} className="poll-option" style={myVote===o.id?{borderColor:"var(--accent)", background:"var(--surface-3)"}:undefined} onClick={()=>castVote(poll.id,o.id)}>
                                       <span style={{fontSize:11, fontWeight:700}}>{o.text}</span>
                                       <span className="bar"><i style={{width:`${pct}%`}}/></span>
                                       <span style={{fontFamily:"var(--font-mono)", fontSize:10}}>{n}</span>
@@ -2649,19 +2650,19 @@ export default function Home(){
                                     </div>
                                   );
                                 })}
-                                <div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)", marginTop:6, textAlign:"right"}}>{total} oy{myVote?" — oyunu değiştirebilirsin":""}</div>
+                                <div style={{fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--muted)", marginTop:6, textAlign:"right"}}>{total} oy{myVote?" — oyunu değiştirebilirsin":""}</div>
                               </div>
                             );
                           })()}
                           {m.githubCard && (
                             <a href={m.githubCard.htmlUrl} target="_blank" rel="noopener noreferrer" className="github-card" onClick={e=>e.stopPropagation()}>
-                              <div className="github-card-head"><span className="icon"><Icon name="github" size={14}/></span> GITHUB <span style={{marginLeft:"auto", fontSize:9, color:"var(--muted)"}}>{m.githubCard.language||""}</span></div>
+                              <div className="github-card-head"><span className="icon"><Icon name="github" size={14}/></span> GITHUB <span style={{marginLeft:"auto", fontSize:10.5, color:"var(--muted)"}}>{m.githubCard.language||""}</span></div>
                               <div className="github-card-body">
                                 <img src={m.githubCard.ownerAvatar} alt="" className="github-card-avatar"/>
                                 <div style={{flex:1, minWidth:0}}>
                                   <div className="github-card-title">{m.githubCard.fullName}</div>
                                   {m.githubCard.description && <div className="github-card-desc">{m.githubCard.description}</div>}
-                                  <div className="github-card-stats"><span>★ {m.githubCard.stars.toLocaleString("tr-TR")}</span><span>⑂ {m.githubCard.forks.toLocaleString("tr-TR")}</span><span style={{marginLeft:"auto", fontSize:9, color:"var(--muted)"}}>github.com</span></div>
+                                  <div className="github-card-stats"><span>★ {m.githubCard.stars.toLocaleString("tr-TR")}</span><span>⑂ {m.githubCard.forks.toLocaleString("tr-TR")}</span><span style={{marginLeft:"auto", fontSize:10.5, color:"var(--muted)"}}>github.com</span></div>
                                 </div>
                               </div>
                             </a>
@@ -2675,7 +2676,7 @@ export default function Home(){
                                 {m.musicCard.primaryGenre && <div className="music-card-genre">{m.musicCard.primaryGenre}</div>}
                                 <div className="music-card-actions">
                                   {m.musicCard.previewUrl && <audio className="music-preview" src={m.musicCard.previewUrl} controls preload="none" style={{height:28, width:"100%", maxWidth:240}} onPlay={(e)=>{ const cur=e.currentTarget; document.querySelectorAll('audio.music-preview').forEach(a=>{ if(a!==cur) { (a as HTMLAudioElement).pause(); try{(a as HTMLAudioElement).currentTime=0;}catch{} } }); }}/>}
-                                  <a href={m.musicCard.trackViewUrl} target="_blank" rel="noopener noreferrer" className="btn" style={{fontSize:9, padding:"4px 8px"}}>Apple Music →</a>
+                                  <a href={m.musicCard.trackViewUrl} target="_blank" rel="noopener noreferrer" className="btn" style={{fontSize:10.5, padding:"4px 8px"}}>Apple Music →</a>
                                 </div>
                               </div>
                             </div>
@@ -2728,23 +2729,23 @@ export default function Home(){
                     {pendingFile.preview ? (
                       <img src={pendingFile.preview} alt="" style={{width:36, height:36, objectFit:"cover", border:"1px solid var(--border)"}}/>
                     ) : (
-                      <div style={{width:36, height:36, border:"1px solid var(--border)", display:"grid", placeItems:"center", fontSize:14}}>{attachmentKind(pendingFile.file)==="video" ? "🎬" : attachmentKind(pendingFile.file)==="audio" ? "♪" : "📎"}</div>
+                      <div style={{width:36, height:36, border:"1px solid var(--border)", display:"grid", placeItems:"center", color:"var(--muted)"}}><span className="icon">{attachmentKind(pendingFile.file)==="video" ? <Icon name="cam" size={16}/> : attachmentKind(pendingFile.file)==="audio" ? <Icon name="music" size={16}/> : <Icon name="paperclip" size={16}/>}</span></div>
                     )}
                     <div style={{flex:1, minWidth:0}}>
                       <div style={{fontFamily:"var(--font-mono)", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{pendingFile.file.name}</div>
-                      <div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>{fmtSize(pendingFile.file.size)}{sendingAttachment ? " — gönderiliyor…" : " — Enter ile gönder"}</div>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--muted)"}}>{fmtSize(pendingFile.file.size)}{sendingAttachment ? " — gönderiliyor…" : " — Enter ile gönder"}</div>
                     </div>
-                    <button onClick={()=>{ if(!sendingAttachment) setPendingFile(null); }} style={{border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", width:22, height:22}}>✕</button>
+                    <button onClick={()=>{ if(!sendingAttachment) setPendingFile(null); }} style={{border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", width:22, height:22}}><span className="icon"><Icon name="close" size={12}/></span></button>
                   </div>
                 )}
                 {replyTo && (
                   <div className="composer-reply">
                     <span>↳ <strong>{replyTo.authorName}</strong> — {replyTo.content.slice(0,60)}</span>
-                    <button onClick={()=>setReplyTo(null)} style={{border:"1px solid var(--border)", background:"transparent", padding:"2px 6px"}}>✕</button>
+                    <button onClick={()=>setReplyTo(null)} style={{border:"1px solid var(--border)", background:"transparent", padding:"2px 6px"}}><span className="icon"><Icon name="close" size={12}/></span></button>
                   </div>
                 )}
                 <form className="composer" onSubmit={sendMessage} style={{alignItems:"center"}}>
-                  <button type="button" onClick={()=>setShowPlusMenu(v=>!v)} className="composer-plus" title="Dosya ekle">＋</button>
+                  <button type="button" onClick={()=>setShowPlusMenu(v=>!v)} className="composer-plus" title="Dosya ekle"><span className="icon"><Icon name="plus" size={16}/></span></button>
                   <div className="composer-main">
                     <textarea
                       ref={composerRef}
@@ -2772,11 +2773,11 @@ export default function Home(){
                 {showPoll && (
                   <div style={{marginTop:8, border:"1px solid var(--border)", background:"var(--surface-2)", padding:10}}>
                     <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, marginBottom:8}}>POLL</div>
-                    <input value={pollQ} onChange={e=>setPollQ(e.target.value)} placeholder="Soru" style={{width:"100%", background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"7px", fontFamily:"var(--font-mono)", fontSize:12, marginBottom:6}} />
+                    <input value={pollQ} onChange={e=>setPollQ(e.target.value)} placeholder="Soru" style={{width:"100%", background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", padding:"7px", fontFamily:"var(--font-mono)", fontSize:12, marginBottom:6}} />
                     {pollOpts.map((o,i)=>(
                       <div key={i} style={{display:"flex", gap:6, marginBottom:4}}>
-                        <input value={o} onChange={e=>setPollOpts(prev=>prev.map((x,idx)=> idx===i? e.target.value: x))} placeholder={`Seçenek ${i+1}`} style={{flex:1, background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"7px", fontSize:12}} />
-                        <button onClick={()=>setPollOpts(p=>p.filter((_,idx)=>idx!==i))} style={{border:"1px solid var(--border)", background:"transparent"}}>✕</button>
+                        <input value={o} onChange={e=>setPollOpts(prev=>prev.map((x,idx)=> idx===i? e.target.value: x))} placeholder={`Seçenek ${i+1}`} style={{flex:1, background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", padding:"7px", fontSize:12}} />
+                        <button onClick={()=>setPollOpts(p=>p.filter((_,idx)=>idx!==i))} style={{border:"1px solid var(--border)", background:"transparent"}}><span className="icon"><Icon name="close" size={12}/></span></button>
                       </div>
                     ))}
                     <div style={{display:"flex", gap:6, marginTop:8}}>
@@ -2796,12 +2797,12 @@ export default function Home(){
               </div>
             )}
 
-            {showEmoji && <div className="picker"><div className="picker-title">EMOJİ <button onClick={()=>setShowEmoji(false)}>✕</button></div><div className="emoji-grid">{EMOJIS.map(e=><button key={e} onClick={()=>{updateDraft(draft + e); setShowEmoji(false);}}>{e}</button>)}</div></div>}
-            {showGif && <div className="picker"><div className="picker-title">GIF <button onClick={()=>setShowGif(false)}>✕</button></div><div className="picker-search"><input value={gifSearch} onChange={e=>setGifSearch(e.target.value)} onKeyDown={e=> e.key==="Enter" && searchGifs()} placeholder="ara..." /><button onClick={searchGifs}>ARA</button></div><div className="gif-grid">{gifResults.map(u=><button key={u} onClick={()=>{updateDraft(draft + " " + u); setShowGif(false);}}><img src={u} alt="gif" /></button>)}{gifResults.length===0 && <div style={{gridColumn:"1 / -1", fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:8, border:"1px dashed var(--border)", textAlign:"center"}}>giphy — API boşsa çalışmaz</div>}</div></div>}
+            {showEmoji && <div className="picker"><div className="picker-title">EMOJİ <button onClick={()=>setShowEmoji(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div><div className="emoji-grid">{EMOJIS.map(e=><button key={e} onClick={()=>{updateDraft(draft + e); setShowEmoji(false);}}>{e}</button>)}</div></div>}
+            {showGif && <div className="picker"><div className="picker-title">GIF <button onClick={()=>setShowGif(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div><div className="picker-search"><input value={gifSearch} onChange={e=>setGifSearch(e.target.value)} onKeyDown={e=> e.key==="Enter" && searchGifs()} placeholder="ara..." /><button onClick={searchGifs}>ARA</button></div><div className="gif-grid">{gifResults.map(u=><button key={u} onClick={()=>{updateDraft(draft + " " + u); setShowGif(false);}}><img src={u} alt="gif" /></button>)}{gifResults.length===0 && <div style={{gridColumn:"1 / -1", fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:8, border:"1px dashed var(--border)", textAlign:"center"}}>giphy — API boşsa çalışmaz</div>}</div></div>}
 
             {showThread && (
               <div className="thread-drawer">
-                <div className="thread-head"><span>THREAD</span><button onClick={()=>setShowThread(false)}>✕</button></div>
+                <div className="thread-head"><span>THREAD</span><button onClick={()=>setShowThread(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
                 <div className="thread-body">
                   {threadParent ? (
                     <>
@@ -2810,7 +2811,7 @@ export default function Home(){
                       </div>
                       {(threadMessages[threadParent.id]||[]).map(tm=>(
                         <div key={tm.id} style={{display:"flex", gap:8, padding:"6px 0", borderBottom:"1px solid var(--border)"}}>
-                          <div className="msg-avatar" style={{width:24, height:24, fontSize:9}}>{initials(tm.authorName||"??")}</div>
+                          <div className="msg-avatar" style={{width:24, height:24, fontSize:10.5}}>{initials(tm.authorName||"??")}</div>
                           <div style={{flex:1}}><div style={{fontSize:12, fontWeight:600}}>{tm.authorName} <span style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>{fmtTime(tm.createdAt)}</span></div><div style={{fontSize:12}}>{tm.content}</div></div>
                         </div>
                       ))}
@@ -2840,7 +2841,7 @@ export default function Home(){
         <aside className="member-sidebar">
           <div className="ms-head">
             <strong>ÜYELER — {members.length}</strong>
-            <button onClick={()=>setShowMembers(false)} style={{border:"1px solid var(--border)", background:"transparent", width:22, height:22, display:"grid", placeItems:"center"}}>✕</button>
+            <button onClick={()=>setShowMembers(false)} style={{border:"1px solid var(--border)", background:"transparent", width:22, height:22, display:"grid", placeItems:"center"}}><span className="icon"><Icon name="close" size={12}/></span></button>
           </div>
           <div className="member-scroll">
             {members.length===0 ? (
@@ -2851,7 +2852,7 @@ export default function Home(){
                 {members.map(m=>(
                   <div key={m.uid} className="member-row" style={{alignItems:"flex-start", cursor:"pointer"}} onClick={()=>openProfile(m.uid)}>
                     <button className="m-av" onClick={(e)=>{e.stopPropagation(); openProfile(m.uid);}} style={{cursor:"pointer", display:"grid", placeItems:"center"}}>{m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}<i className="status-dot online"/></button>
-                    <div style={{flex:1, minWidth:0}}><div className="m-name">{m.profile?.displayName||m.profile?.username}</div><small>{m.role}</small>{m.profile?.nowPlaying && <small style={{display:"flex", alignItems:"center", gap:4, color:"#1DB954", marginTop:2}}><span style={{fontSize:9}}>♪</span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile.nowPlaying.track} — {m.profile.nowPlaying.artist}</span></small>}</div>
+                    <div style={{flex:1, minWidth:0}}><div className="m-name">{m.profile?.displayName||m.profile?.username}</div><small>{m.role}</small>{m.profile?.nowPlaying && <small style={{display:"flex", alignItems:"center", gap:4, color:"var(--spotify)", marginTop:2}}><span className="icon"><Icon name="music" size={10}/></span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile.nowPlaying.track} — {m.profile.nowPlaying.artist}</span></small>}</div>
                   </div>
                 ))}
               </div>
@@ -2863,7 +2864,7 @@ export default function Home(){
       {showCreateServer && (
         <div className="modal-backdrop" onClick={()=>setShowCreateServer(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-head"><span>SUNUCU OLUŞTUR</span><button onClick={()=>setShowCreateServer(false)}>✕</button></div>
+            <div className="modal-head"><span>SUNUCU OLUŞTUR</span><button onClick={()=>setShowCreateServer(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               <div className="icon-upload">
                 {newServerIcon ? <img src={newServerIcon} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
@@ -2884,7 +2885,7 @@ export default function Home(){
       {showCreateChannel && (
         <div className="modal-backdrop" onClick={()=>setShowCreateChannel(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-head"><span>KANAL OLUŞTUR</span><button onClick={()=>setShowCreateChannel(false)}>✕</button></div>
+            <div className="modal-head"><span>KANAL OLUŞTUR</span><button onClick={()=>setShowCreateChannel(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               <label>TİP</label>
               <select value={newChannelType} onChange={e=>setNewChannelType(e.target.value as Channel["type"])}>
@@ -2909,7 +2910,7 @@ export default function Home(){
       {editingChannel && (
         <div className="modal-backdrop" onClick={()=>setEditingChannel(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-head"><span>KANALI DÜZENLE — #{editingChannel.name}</span><button onClick={()=>setEditingChannel(null)}>✕</button></div>
+            <div className="modal-head"><span>KANALI DÜZENLE — #{editingChannel.name}</span><button onClick={()=>setEditingChannel(null)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               <label>KANAL ADI</label>
               <input value={editChannelName} onChange={e=>setEditChannelName(e.target.value)} placeholder="genel" />
@@ -2929,13 +2930,13 @@ export default function Home(){
       {showInvite && (
         <div className="modal-backdrop" onClick={()=>setShowInvite(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-head"><span>DAVET</span><button onClick={()=>setShowInvite(false)}>✕</button></div>
+            <div className="modal-head"><span>DAVET</span><button onClick={()=>setShowInvite(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               <button className="btn btn-primary" onClick={createInvite}>KOD ÜRET</button>
               {inviteCode && (
-                <div style={{marginTop:12, border:"1px solid #fff", padding:10, background:"#fff", color:"#000"}}>
+                <div style={{marginTop:12, border:"1px solid var(--accent)", padding:10, background:"var(--accent)", color:"var(--accent-fg)"}}>
                   <div style={{fontFamily:"var(--font-mono)", fontSize:18, fontWeight:800, letterSpacing:".12em"}}>{inviteCode}</div>
-                  <button className="btn" style={{marginTop:8, borderColor:"#000"}} onClick={()=>{navigator.clipboard.writeText(inviteCode); setToast("kopyalandı");}}>KOPYALA</button>
+                  <button className="btn" style={{marginTop:8, borderColor:"var(--border-strong)"}} onClick={()=>{navigator.clipboard.writeText(inviteCode); setToast("kopyalandı");}}>KOPYALA</button>
                 </div>
               )}
             </div>
@@ -2946,7 +2947,7 @@ export default function Home(){
       {showJoinInvite && (
         <div className="modal-backdrop" onClick={()=>setShowJoinInvite(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-head"><span>DAVETLE KATIL</span><button onClick={()=>setShowJoinInvite(false)}>✕</button></div>
+            <div className="modal-head"><span>DAVETLE KATIL</span><button onClick={()=>setShowJoinInvite(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               <div className="join-invite-card">
                 <div className="join-invite-icon"><span className="icon"><Icon name="invite" size={26}/></span></div>
@@ -2969,7 +2970,7 @@ export default function Home(){
       {showServerInviteMenu && (
         <div className="modal-backdrop" onClick={()=>setShowServerInviteMenu(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{width:"min(420px,100%)"}}>
-            <div className="modal-head"><span>DAVET ET — {selectedServerData?.name || "SUNUCU"}</span><button onClick={()=>setShowServerInviteMenu(false)}>✕</button></div>
+            <div className="modal-head"><span>DAVET ET — {selectedServerData?.name || "SUNUCU"}</span><button onClick={()=>setShowServerInviteMenu(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               <button className="invite-method" onClick={()=>{ setShowServerInviteMenu(false); setShowInvite(true); }}>
                 <span className="invite-method-icon"><span className="icon"><Icon name="invite" size={16}/></span></span>
@@ -2995,7 +2996,7 @@ export default function Home(){
       {showServerFriendPicker && (
         <div className="modal-backdrop" onClick={()=>setShowServerFriendPicker(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{width:"min(440px,100%)"}}>
-            <div className="modal-head"><span>ARKADAŞLARI DAVET ET — {selectedServerData?.name}</span><button onClick={()=>setShowServerFriendPicker(false)}>✕</button></div>
+            <div className="modal-head"><span>ARKADAŞLARI DAVET ET — {selectedServerData?.name}</span><button onClick={()=>setShowServerFriendPicker(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               {friends.length===0 ? (
                 <div className="invite-pick-hint">arkadaş listen boş — önce arkadaşlık isteği gönder</div>
@@ -3003,7 +3004,7 @@ export default function Home(){
                 <div style={{display:"flex", flexDirection:"column", gap:6, maxHeight:"46vh", overflow:"auto"}}>
                   {friends.map(f=>(
                     <div key={f.uid} className="friend-row" style={{marginBottom:0}}>
-                      <span className="avatar" style={{border:"1px solid var(--border)", background:"#111", overflow:"hidden", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</span>
+                      <span className="avatar" style={{border:"1px solid var(--border)", background:"var(--surface-3)", overflow:"hidden", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</span>
                       <div style={{flex:1, minWidth:0}}>
                         <div data-friend-name style={{fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username||f.uid.slice(0,6)}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
@@ -3026,13 +3027,13 @@ export default function Home(){
       {inviteFriendTarget && (
         <div className="modal-backdrop" onClick={()=>setInviteFriendTarget(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-head"><span>SUNUCUYA DAVET ET</span><button onClick={()=>setInviteFriendTarget(null)}>✕</button></div>
+            <div className="modal-head"><span>SUNUCUYA DAVET ET</span><button onClick={()=>setInviteFriendTarget(null)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               <div className="invite-pick-hint">davet edeceğin sunucuyu seç — arkadaşın daveti kabul ettiğinde doğrudan o sunucuya katılır</div>
               <div style={{display:"flex", flexDirection:"column", gap:8}}>
                 {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).map(s=>(
                   <button key={s.id} className={`friend-row ${inviteFriendServer===s.id?"invite-selected":""}`} onClick={()=>setInviteFriendServer(s.id)} style={{cursor:"pointer", width:"100%", textAlign:"left"}}>
-                    <span className="avatar" style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", overflow:"hidden"}}>{s.iconUrl ? <img src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(s.name)}</span>
+                    <span className="avatar" style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", overflow:"hidden"}}>{s.iconUrl ? <img src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(s.name)}</span>
                     <span style={{flex:1, fontWeight:600, fontSize:13}}>{s.name}</span>
                     <span className="invite-radio">{inviteFriendServer===s.id ? "◉" : "○"}</span>
                   </button>
@@ -3050,14 +3051,14 @@ export default function Home(){
       {showUserSettings && (
         <div className="modal-backdrop" onClick={()=>setShowUserSettings(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-head"><span>PROFİLİ DÜZENLE — Discord “Profiles” gibi</span><button onClick={()=>setShowUserSettings(false)}>✕</button></div>
+            <div className="modal-head"><span>PROFİLİ DÜZENLE — Discord “Profiles” gibi</span><button onClick={()=>setShowUserSettings(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body" style={{maxHeight:"68vh", overflow:"auto", padding:14}}>
               <div style={{display:"flex", flexDirection:"column", gap:14}}>
                 <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, display:"flex", gap:10, alignItems:"center"}}>
-                  <div style={{width:48, height:48, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", flex:"0 0 auto"}}>
+                  <div style={{width:48, height:48, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", flex:"0 0 auto"}}>
                     {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}
                     {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none"}}/>}
-                    {profile?.decoration && !profile.decoration.startsWith("http") && <div style={{position:"absolute", inset:-2, border:"2px solid #fff", borderRadius: profile.decoration==="circle" ? "50%" : "0"}}/>}
+                    {profile?.decoration && !profile.decoration.startsWith("http") && <div style={{position:"absolute", inset:-2, border:"2px solid var(--accent)", borderRadius: profile.decoration==="circle" ? "50%" : "0"}}/>}
                   </div>
                   <div style={{flex:1, minWidth:0}}>
                     <div style={{fontWeight:700, fontSize:13}}>{profile?.displayName || "—"}</div>
@@ -3093,15 +3094,15 @@ export default function Home(){
 
                 <div>
                   <label>BIO — HAKKIMDA</label>
-                  <textarea value={profile?.bio ?? ""} onChange={e=> setProfile(p=> p? {...p, bio:e.target.value}:p)} placeholder="kendini anlat — **kalın**, `kod`, emoji" rows={2} style={{width:"100%", background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                  <textarea value={profile?.bio ?? ""} onChange={e=> setProfile(p=> p? {...p, bio:e.target.value}:p)} placeholder="kendini anlat — **kalın**, `kod`, emoji" rows={2} style={{width:"100%", background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}} />
                 </div>
 
                 <div>
                   <label>BAĞLANTILAR — CONNECTIONS <span style={{fontWeight:400, textTransform:"none", letterSpacing:0}}>(kullanıcı adı veya tam link)</span></label>
                   <div style={{display:"flex", flexDirection:"column", gap:6}}>
-                    <input value={connGithub} onChange={e=>setConnGithub(e.target.value)} placeholder="github: kerimhypr" style={{background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
-                    <input value={connSpotify} onChange={e=>setConnSpotify(e.target.value)} placeholder="spotify: kullanıcı adı veya link" style={{background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
-                    <input value={connSite} onChange={e=>setConnSite(e.target.value)} placeholder="site: example.com" style={{background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                    <input value={connGithub} onChange={e=>setConnGithub(e.target.value)} placeholder="github: kerimhypr" style={{background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                    <input value={connSpotify} onChange={e=>setConnSpotify(e.target.value)} placeholder="spotify: kullanıcı adı veya link" style={{background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
+                    <input value={connSite} onChange={e=>setConnSite(e.target.value)} placeholder="site: example.com" style={{background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", padding:"7px 8px", fontFamily:"var(--font-mono)", fontSize:12}} />
                   </div>
                 </div>
 
@@ -3118,11 +3119,11 @@ export default function Home(){
 
                 <div>
                   <label>DEKORASYON — Discord tarzı <span style={{fontWeight:400, textTransform:"none"}}>({DECORATIONS.length} adet)</span></label>
-                  <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(56px, 1fr))", gap:6, maxHeight:120, overflow:"auto", border:"1px solid var(--border)", padding:6, background:"#000"}}>
+                  <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(56px, 1fr))", gap:6, maxHeight:120, overflow:"auto", border:"1px solid var(--border)", padding:6, background:"var(--bg)"}}>
                     {DECORATIONS.map(d=>(
-                      <button key={d.id} onClick={()=>setProfile(p=>p?{...p, decoration: d.url || undefined}:p)} title={d.label} style={{aspectRatio:"1", border:"1px solid var(--border)", background: (profile?.decoration||"")===d.url ? "#fff" : "#111", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", padding:0}}>
-                        {d.url ? <img src={d.url} alt={d.label} style={{width:"140%", height:"140%", objectFit:"contain", position:"absolute", inset:"-20%"}} loading="lazy" onError={(e)=>{ (e.currentTarget as HTMLImageElement).style.display="none"; }}/> : <span style={{fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>YOK</span>}
-                        <span style={{position:"absolute", bottom:1, left:0, right:0, background:"rgba(0,0,0,.7)", color:"#fff", fontFamily:"var(--font-mono)", fontSize:8, textAlign:"center", padding:"1px 0", lineHeight:1.2}}>{d.label.slice(0,6)}</span>
+                      <button key={d.id} onClick={()=>setProfile(p=>p?{...p, decoration: d.url || undefined}:p)} title={d.label} style={{aspectRatio:"1", border:"1px solid var(--border)", background: (profile?.decoration||"")===d.url ? "var(--accent)" : "var(--surface-3)", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", padding:0}}>
+                        {d.url ? <img src={d.url} alt={d.label} style={{width:"140%", height:"140%", objectFit:"contain", position:"absolute", inset:"-20%"}} loading="lazy" onError={(e)=>{ (e.currentTarget as HTMLImageElement).style.display="none"; }}/> : <span style={{fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--muted)"}}>YOK</span>}
+                        <span style={{position:"absolute", bottom:1, left:0, right:0, background:"rgba(0,0,0,.7)", color:"var(--text)", fontFamily:"var(--font-mono)", fontSize:8, textAlign:"center", padding:"1px 0", lineHeight:1.2}}>{d.label.slice(0,6)}</span>
                       </button>
                     ))}
                   </div>
@@ -3134,7 +3135,7 @@ export default function Home(){
                   <div style={{marginTop:10}}>
                     <label>BANNER</label>
                     <div style={{height:44, border:"1px solid var(--border)", background: profile?.bannerUrl ? `url(${profile.bannerUrl}) center/cover` : (profile?.bannerColor || "#fff"), position:"relative"}}>
-                      {!profile?.bannerUrl && <div style={{position:"absolute", inset:0, backgroundImage:"linear-gradient(to right, #111 1px, transparent 1px)", backgroundSize:"14px 14px", opacity:.2}}/>}
+                      {!profile?.bannerUrl && <div style={{position:"absolute", inset:0, backgroundImage:"linear-gradient(to right, var(--border) 1px, transparent 1px)", backgroundSize:"14px 14px", opacity:.2}}/>}
                     </div>
                     <div style={{display:"flex", gap:4, marginTop:6}}>
                       <label style={{flex:1, border:"1px dashed var(--border)", padding:"6px", textAlign:"center", cursor:"pointer", fontFamily:"var(--font-mono)", fontSize:10}}>YÜKLE<input type="file" accept="image/*" hidden onChange={async e=>{const f=e.target.files?.[0]; if(!f) return; if(f.size>3*1024*1024){setToast("3MB"); return;} const r=new FileReader(); r.onload=async()=>{const url=r.result as string; setProfile(p=>p?{...p, bannerUrl:url}:p);}; r.readAsDataURL(f);}} /></label>
@@ -3145,7 +3146,7 @@ export default function Home(){
                     <div style={{display:"flex", gap:4, flexWrap:"wrap"}}>
                       {["OPERATOR","EARLY","BOOSTER","DEV","AKAY"].map(b=>{
                         const has = (profile?.badges||[]).includes(b);
-                        return <button key={b} onClick={()=>setProfile(p=>{const cur=p?.badges||[]; const next= has ? cur.filter(x=>x!==b) : [...cur,b]; return p?{...p, badges: next}:p;})} style={{border:"1px solid var(--border)", background: has ? "#fff":"transparent", color: has ? "#000":"var(--muted)", padding:"4px 6px", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700}}>{b}</button>
+                        return <button key={b} onClick={()=>setProfile(p=>{const cur=p?.badges||[]; const next= has ? cur.filter(x=>x!==b) : [...cur,b]; return p?{...p, badges: next}:p;})} style={{border:"1px solid var(--border)", background: has ? "var(--accent)":"transparent", color: has ? "var(--accent-fg)":"var(--muted)", padding:"4px 6px", fontFamily:"var(--font-mono)", fontSize:10.5, fontWeight:700}}>{b}</button>
                       })}
                     </div>
                     <label>ACCENT</label>
@@ -3192,7 +3193,7 @@ export default function Home(){
                 {id:"gizlilik", label:"Gizlilik", icon:"inbox"},
                 {id:"cikis", label:"Çıkış", icon:"logout"},
               ].map(tab=>(
-                <button key={tab.id} onClick={()=>setAccountTab(tab.id as any)} style={{textAlign:"left", padding:"8px 10px", border:"1px solid var(--border)", background: accountTab===tab.id ? "#fff" : "transparent", color: accountTab===tab.id ? "#000" : "var(--muted)", fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:8}}>
+                <button key={tab.id} onClick={()=>setAccountTab(tab.id as any)} style={{textAlign:"left", padding:"8px 10px", border:"1px solid var(--border)", background: accountTab===tab.id ? "var(--accent)" : "transparent", color: accountTab===tab.id ? "var(--accent-fg)" : "var(--muted)", fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:8}}>
                   <span className="icon"><Icon name={tab.icon}/></span>{tab.label}
                 </button>
               ))}
@@ -3203,12 +3204,12 @@ export default function Home(){
               </div>
             </div>
             <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0, background:"var(--surface)"}}>
-              <div className="modal-head"><span>{accountTab==="hesabim" ? "HESABIM" : accountTab==="gorunum" ? "GÖRÜNÜM" : accountTab==="gizlilik" ? "GİZLİLİK" : "ÇIKIŞ"}</span><button onClick={()=>setShowAccountSettings(false)}>✕</button></div>
+              <div className="modal-head"><span>{accountTab==="hesabim" ? "HESABIM" : accountTab==="gorunum" ? "GÖRÜNÜM" : accountTab==="gizlilik" ? "GİZLİLİK" : "ÇIKIŞ"}</span><button onClick={()=>setShowAccountSettings(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
               <div style={{flex:1, overflow:"auto", padding:16}}>
                 {accountTab==="hesabim" && (
                   <div style={{display:"flex", flexDirection:"column", gap:14}}>
                     <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:12, display:"flex", gap:12, alignItems:"center", minWidth:0}}>
-                      <div style={{width:64, height:64, minWidth:64, border:"1px solid var(--border)", background:"#000", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", flex:"0 0 auto"}}>
+                      <div style={{width:64, height:64, minWidth:64, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", flex:"0 0 auto"}}>
                         {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}
                         {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
                       </div>
@@ -3249,17 +3250,17 @@ export default function Home(){
                         </div>
                       </div>
                     </div>
-                    <div style={{border:"1px solid #1DB954", background:"#0a1a0f", padding:10}}>
-                      <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, color:"#1DB954", display:"flex", alignItems:"center", gap:6}}><span className="icon"><Icon name="music" size={12}/></span> ŞU AN DİNLİYOR — PROFİLDEN SEÇ</div>
-                      <div style={{fontSize:11, color:"#a3d9b1", marginTop:4}}>iTunes Search (ücretsiz/keysiz) ile ara, profile yazılır — server'a mesaj gitmez.</div>
+                    <div style={{border:"1px solid var(--spotify)", background:"rgba(29,185,84,.08)", padding:10}}>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, color:"var(--spotify)", display:"flex", alignItems:"center", gap:6}}><span className="icon"><Icon name="music" size={12}/></span> ŞU AN DİNLİYOR — PROFİLDEN SEÇ</div>
+                      <div style={{fontSize:11, color:"var(--spotify)", marginTop:4}}>iTunes Search (ücretsiz/keysiz) ile ara, profile yazılır — server'a mesaj gitmez.</div>
                       {profile?.nowPlaying && (
-                        <div style={{marginTop:8, border:"1px solid #1DB954", background:"#000", padding:8, display:"flex", gap:8, alignItems:"center"}}>
+                        <div style={{marginTop:8, border:"1px solid var(--spotify)", background:"var(--bg)", padding:8, display:"flex", gap:8, alignItems:"center"}}>
                           {profile.nowPlaying.artwork && <img src={profile.nowPlaying.artwork} alt="" style={{width:40, height:40, flex:"0 0 auto"}}/>}
                           <div style={{flex:1, minWidth:0}}>
                             <div style={{fontSize:12, fontWeight:700, overflowWrap:"anywhere"}}>{profile.nowPlaying.track}</div>
                             <div style={{fontSize:11, color:"var(--muted)", overflowWrap:"anywhere"}}>{profile.nowPlaying.artist}</div>
                           </div>
-                          <button className="btn" style={{borderColor:"#ff9baf", color:"#ff9baf", flex:"0 0 auto"}} onClick={async()=>{ try{ await update(ref(db,`users/${user.uid}/public`),{nowPlaying:null}); setProfile(p=>p?{...p, nowPlaying:null}:p); setToast("temizlendi"); }catch(e:any){setToast(e.message);} }}>TEMİZLE</button>
+                          <button className="btn" style={{borderColor:"var(--danger)", color:"var(--danger)", flex:"0 0 auto"}} onClick={async()=>{ try{ await update(ref(db,`users/${user.uid}/public`),{nowPlaying:null}); setProfile(p=>p?{...p, nowPlaying:null}:p); setToast("temizlendi"); }catch(e:any){setToast(e.message);} }}>TEMİZLE</button>
                         </div>
                       )}
                       <div style={{display:"flex", gap:6, marginTop:8}}>
@@ -3269,7 +3270,7 @@ export default function Home(){
                       {npResults && (
                         <div style={{marginTop:8, display:"flex", flexDirection:"column", gap:6}}>
                           {npResults.length===0 ? <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", border:"1px dashed var(--border)", padding:8, textAlign:"center"}}>sonuç yok</div> : npResults.map(c=>(
-                            <div key={c.trackViewUrl} style={{display:"flex", gap:8, alignItems:"center", border:"1px solid var(--border)", background:"#000", padding:6}}>
+                            <div key={c.trackViewUrl} style={{display:"flex", gap:8, alignItems:"center", border:"1px solid var(--border)", background:"var(--bg)", padding:6}}>
                               <img src={c.artworkUrl} alt="" style={{width:36, height:36, flex:"0 0 auto"}}/>
                               <div style={{flex:1, minWidth:0}}>
                                 <div style={{fontSize:12, fontWeight:700, overflowWrap:"anywhere"}}>{c.trackName}</div>
@@ -3282,10 +3283,10 @@ export default function Home(){
                         </div>
                       )}
                     </div>
-                    <div style={{border:"1px solid #3a0000", background:"#1a0000", padding:10}}>
-                      <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, color:"#ff9baf"}}>HESABI SİL</div>
-                      <div style={{fontSize:11, color:"#ff9baf", opacity:.8, marginTop:4}}>Bu işlem geri alınamaz. Sunucuların ve mesajların silinir.</div>
-                      <button className="btn btn-danger" style={{marginTop:8, borderColor:"#ff9baf", color:"#ff9baf"}} onClick={async()=>{
+                    <div style={{border:"1px solid rgba(242,63,66,.35)", background:"rgba(242,63,66,.07)", padding:10, borderRadius:"var(--r-sm)"}}>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, color:"var(--danger)"}}>HESABI SİL</div>
+                      <div style={{fontSize:11, color:"var(--danger)", opacity:.8, marginTop:4}}>Bu işlem geri alınamaz. Sunucuların ve mesajların silinir.</div>
+                      <button className="btn btn-danger" style={{marginTop:8, borderColor:"var(--danger)", color:"var(--danger)"}} onClick={async()=>{
                         if(!confirm("hesabı kalıcı silmek istiyor musun?")) return;
                         try{ await remove(ref(db,`users/${user.uid}`)); await user.delete(); setToast("hesap silindi"); }catch(e:any){ setToast(e.message); }
                       }}>HESABI SİL</button>
@@ -3298,13 +3299,13 @@ export default function Home(){
                       <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>TEMA</div>
                       <div style={{fontSize:11, color:"var(--muted)", marginTop:4}}>Akayroom brutalist — siyah/beyaz, 1px border, JetBrains Mono. Tema şimdilik sabit, yakında açık/koyu.</div>
                       <div style={{display:"flex", gap:6, marginTop:8}}>
-                        <div style={{flex:1, height:32, border:"1px solid #fff", background:"#000", display:"grid", placeItems:"center", fontFamily:"var(--font-mono)", fontSize:10}}>SİYAH</div>
-                        <div style={{flex:1, height:32, border:"1px solid var(--border)", background:"#fff", color:"#000", display:"grid", placeItems:"center", fontFamily:"var(--font-mono)", fontSize:10}}>BEYAZ (yakında)</div>
+                        <div style={{flex:1, height:32, border:"1px solid var(--accent)", background:"var(--bg)", display:"grid", placeItems:"center", fontFamily:"var(--font-mono)", fontSize:10}}>SİYAH</div>
+                        <div style={{flex:1, height:32, border:"1px solid var(--border)", background:"var(--accent)", color:"var(--accent-fg)", display:"grid", placeItems:"center", fontFamily:"var(--font-mono)", fontSize:10}}>BEYAZ (yakında)</div>
                       </div>
                     </div>
                     <div style={{border:"1px solid var(--border)", padding:12}}>
                       <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>DİL</div>
-                      <select defaultValue="tr" style={{marginTop:6, width:"100%", background:"#000", border:"1px solid var(--border)", color:"#fff", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}}>
+                      <select defaultValue="tr" style={{marginTop:6, width:"100%", background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", padding:"8px", fontFamily:"var(--font-mono)", fontSize:12}}>
                         <option value="tr">Türkçe</option><option value="en">English (yakında)</option>
                       </select>
                     </div>
@@ -3325,10 +3326,10 @@ export default function Home(){
                 )}
                 {accountTab==="cikis" && (
                   <div style={{display:"flex", flexDirection:"column", gap:12, maxWidth:440}}>
-                    <div style={{border:"1px solid #ff5c70", background:"#190006", padding:16}}>
-                      <div style={{fontFamily:"var(--font-mono)", fontSize:12, fontWeight:700, color:"#ff9baf"}}>OTURUMU KAPAT</div>
-                      <div style={{fontSize:12, color:"#ffb7c3", marginTop:8}}>Bu cihazdaki Akayroom oturumun kapatılır. Hesabın ve sunucuların silinmez.</div>
-                      <button className="btn btn-danger" onClick={()=>void doSignOut()} style={{marginTop:14, borderColor:"#ff9baf", color:"#ff9baf"}}>ÇIKIŞ YAP</button>
+                    <div style={{border:"1px solid rgba(242,63,66,.4)", background:"rgba(242,63,66,.07)", padding:16, borderRadius:"var(--r-sm)"}}>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:12, fontWeight:700, color:"var(--danger)"}}>OTURUMU KAPAT</div>
+                      <div style={{fontSize:12, color:"var(--text-2)", marginTop:8}}>Bu cihazdaki Akayroom oturumun kapatılır. Hesabın ve sunucuların silinmez.</div>
+                      <button className="btn btn-danger" onClick={()=>void doSignOut()} style={{marginTop:14, borderColor:"var(--danger)", color:"var(--danger)"}}>ÇIKIŞ YAP</button>
                     </div>
                     <div style={{border:"1px dashed var(--border)", padding:12, fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>Hesabı kalıcı silmek için Hesabım sekmesindeki Hesabı Sil alanını kullan.</div>
                   </div>
@@ -3346,7 +3347,7 @@ export default function Home(){
       {showServerSettings && !isDemo && (
         <div className="modal-backdrop" onClick={()=>setShowServerSettings(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-head"><span>SUNUCU — {selectedServerData?.name}</span><button onClick={()=>setShowServerSettings(false)}>✕</button></div>
+            <div className="modal-head"><span>SUNUCU — {selectedServerData?.name}</span><button onClick={()=>setShowServerSettings(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               {(()=>{ const myRole=members.find(m=>m.uid===user?.uid)?.role; const canManage=myRole==="owner"||myRole==="admin"; const isOwner=myRole==="owner"; return (
                 <>
@@ -3365,7 +3366,7 @@ export default function Home(){
                   )}
                   {!canManage && (
                     <div style={{border:"1px solid var(--border)", padding:10, background:"var(--surface-2)", display:"flex", gap:10, alignItems:"center"}}>
-                      {selectedServerData?.iconUrl ? <img src={selectedServerData.iconUrl} alt="" style={{width:40, height:40, border:"1px solid var(--border)"}}/> : <span style={{width:40, height:40, display:"grid", placeItems:"center", border:"1px solid var(--border)", background:"#000"}}><span className="icon"><Icon name="grid" size={16}/></span></span>}
+                      {selectedServerData?.iconUrl ? <img src={selectedServerData.iconUrl} alt="" style={{width:40, height:40, border:"1px solid var(--border)"}}/> : <span style={{width:40, height:40, display:"grid", placeItems:"center", border:"1px solid var(--border)", background:"var(--bg)"}}><span className="icon"><Icon name="grid" size={16}/></span></span>}
                       <div>
                         <div style={{fontWeight:700}}>{selectedServerData?.name}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>ID: {selectedServer} • {members.length} üye</div>
@@ -3412,26 +3413,26 @@ export default function Home(){
                   return (
                     <div style={{marginTop:8, display:"flex", flexDirection:"column", gap:4}}>
                       {members.map(m=>(
-                        <div key={m.uid} style={{display:"flex", alignItems:"center", gap:8, border:"1px solid var(--border)", background:"#000", padding:"5px 8px"}}>
-                          <div style={{width:22, height:22, borderRadius:"50%", background:"#111", color:"#fff", display:"grid", placeItems:"center", fontSize:9, fontWeight:700, overflow:"hidden"}}>
+                        <div key={m.uid} style={{display:"flex", alignItems:"center", gap:8, border:"1px solid var(--border)", background:"var(--bg)", padding:"5px 8px"}}>
+                          <div style={{width:22, height:22, borderRadius:"50%", background:"var(--surface-3)", color:"var(--text)", display:"grid", placeItems:"center", fontSize:10.5, fontWeight:700, overflow:"hidden"}}>
                             {m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}
                           </div>
                           <span style={{flex:1, minWidth:0, fontFamily:"var(--font-mono)", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile?.displayName||m.profile?.username||m.uid.slice(0,6)}</span>
                           {canManage && m.uid!==user?.uid ? (
-                            <select value={m.role} onChange={e=>setRole(m.uid, e.target.value, m.role)} style={{background:"#000", border:"1px solid var(--border)", color:"#fff", fontFamily:"var(--font-mono)", fontSize:10, padding:"2px 4px"}}>
+                            <select value={m.role} onChange={e=>setRole(m.uid, e.target.value, m.role)} style={{background:"var(--bg)", border:"1px solid var(--border)", color:"var(--text)", fontFamily:"var(--font-mono)", fontSize:10, padding:"2px 4px"}}>
                               <option value="member">member</option>
                               <option value="admin">admin</option>
                               <option value="owner">owner</option>
                             </select>
                           ) : (
-                            <span style={{fontFamily:"var(--font-mono)", fontSize:10, color: m.role==="owner"?"#fff":"var(--muted)", border:"1px solid var(--border)", padding:"2px 6px"}}>{m.role}</span>
+                            <span style={{fontFamily:"var(--font-mono)", fontSize:10, color: m.role==="owner"?"var(--accent)":"var(--muted)", border:"1px solid var(--border)", padding:"2px 6px"}}>{m.role}</span>
                           )}
                         </div>
                       ))}
                     </div>
                   );
                 })()}
-                <div style={{marginTop:6, fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)"}}>owner: her şey • admin: rolleri yönetir • member: sohbet</div>
+                <div style={{marginTop:6, fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--muted)"}}>owner: her şey • admin: rolleri yönetir • member: sohbet</div>
               </div>
             </div>
           </div>
@@ -3454,31 +3455,31 @@ export default function Home(){
       {selectedProfileUid && (
         <div className="modal-backdrop" onClick={()=>setSelectedProfileUid(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{width:"min(380px, 100%)", overflow:"visible"}}>
-            <div style={{height:84, background: selectedProfile?.bannerUrl ? `url(${selectedProfile.bannerUrl}) center/cover` : (selectedProfile?.bannerColor || "#fff"), position:"relative", borderBottom:"1px solid #fff", overflow:"visible"}}>
-              {!selectedProfile?.bannerUrl && <div style={{position:"absolute", inset:0, backgroundImage:"linear-gradient(to right, #111 1px, transparent 1px), linear-gradient(to bottom, #111 1px, transparent 1px)", backgroundSize:"16px 16px", opacity:.2}}/>}
+            <div style={{height:84, background: selectedProfile?.bannerUrl ? `url(${selectedProfile.bannerUrl}) center/cover` : (selectedProfile?.bannerColor || "#fff"), position:"relative", borderBottom:"1px solid var(--accent)", overflow:"visible"}}>
+              {!selectedProfile?.bannerUrl && <div style={{position:"absolute", inset:0, backgroundImage:"linear-gradient(to right, var(--border) 1px, transparent 1px), linear-gradient(to bottom, var(--border) 1px, transparent 1px)", backgroundSize:"16px 16px", opacity:.2}}/>}
             </div>
             <div className="modal-body" style={{paddingTop:48, position:"relative", textAlign:"left", overflow:"visible"}}>
-              <div style={{position:"absolute", top:-32, left:16, width:68, height:68, border:"2px solid #fff", background:"#000", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)"}}>
+              <div style={{position:"absolute", top:-32, left:16, width:68, height:68, border:"2px solid var(--accent)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)"}}>
                 <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{selectedProfile?.avatarUrl ? <img src={selectedProfile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800}}>{selectedProfile ? initials(selectedProfile.displayName||selectedProfile.username) : "??"}</span>}</div>
                 {selectedProfile?.decoration && selectedProfile.decoration.startsWith("http") && <img src={selectedProfile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/>}
               </div>
               <div style={{position:"absolute", top:-32, right:16, display:"flex", gap:4}}>
-                {(selectedProfile?.badges||[]).map(b=> <span key={b} style={{background:"#fff", color:"#000", border:"1px solid #000", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700, padding:"2px 5px"}}>{b}</span>)}
+                {(selectedProfile?.badges||[]).map(b=> <span key={b} style={{background:"var(--accent)", color:"var(--accent-fg)", border:"1px solid #000", fontFamily:"var(--font-mono)", fontSize:10.5, fontWeight:700, padding:"2px 5px"}}>{b}</span>)}
               </div>
               {profileLoading ? <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center", padding:20}}>yükleniyor…</div> : selectedProfile ? (
                 <>
                   <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
                     <span style={{fontWeight:800, fontSize:15}}>{selectedProfile.displayName}</span>
                     {selectedProfile.pronouns && <span style={{border:"1px solid var(--border)", fontFamily:"var(--font-mono)", fontSize:10, padding:"1px 5px", color:"var(--muted)"}}>{selectedProfile.pronouns}</span>}
-                    {selectedProfile.title && <span style={{border:"1px solid #fff", background:"#fff", color:"#000", fontFamily:"var(--font-mono)", fontSize:10, fontWeight:700, padding:"1px 5px"}}>{selectedProfile.title}</span>}
+                    {selectedProfile.title && <span style={{border:"1px solid var(--accent)", background:"var(--accent)", color:"var(--accent-fg)", fontFamily:"var(--font-mono)", fontSize:10, fontWeight:700, padding:"1px 5px"}}>{selectedProfile.title}</span>}
                     {selectedProfile.accentColor && <span style={{width:8, height:8, background:selectedProfile.accentColor, border:"1px solid var(--border)", display:"inline-block"}}/>}
                   </div>
                   <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>@{selectedProfile.username} • {selectedProfile.customStatusEmoji || ""} {selectedProfile.customStatus || selectedProfile.statusText || ""}</div>
                   {selectedProfile.nowPlaying && (
-                    <div style={{marginTop:10, border:"1px solid #1DB954", background:"#0a1a0f", padding:8, display:"flex", gap:8, alignItems:"center"}}>
-                      {selectedProfile.nowPlaying.artwork && <img src={selectedProfile.nowPlaying.artwork} alt="" style={{width:40, height:40, border:"1px solid #1DB954", flex:"0 0 auto"}}/>}
+                    <div style={{marginTop:10, border:"1px solid var(--spotify)", background:"rgba(29,185,84,.08)", padding:8, display:"flex", gap:8, alignItems:"center"}}>
+                      {selectedProfile.nowPlaying.artwork && <img src={selectedProfile.nowPlaying.artwork} alt="" style={{width:40, height:40, border:"1px solid var(--spotify)", flex:"0 0 auto"}}/>}
                       <div style={{flex:1, minWidth:0}}>
-                        <div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"#1DB954", fontWeight:700, letterSpacing:".08em"}}>♪ ŞU AN DİNLİYOR</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--spotify)", fontWeight:700, letterSpacing:".08em", display:"flex", alignItems:"center", gap:6}}><span className="icon"><Icon name="music" size={12}/></span> ŞU AN DİNLİYOR</div>
                         <div style={{fontSize:12, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{selectedProfile.nowPlaying.track}</div>
                         <div style={{fontSize:11, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{selectedProfile.nowPlaying.artist}{selectedProfile.nowPlaying.genre?` • ${selectedProfile.nowPlaying.genre}`:""}</div>
                       </div>
@@ -3494,7 +3495,7 @@ export default function Home(){
                   return items.length ? (
                     <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:10}}>
                       {items.map(it=>(
-                        <a key={it.k} href={it.href} target="_blank" rel="noreferrer" style={{border:"1px solid var(--border)", background:"#fff", color:"#000", fontFamily:"var(--font-mono)", fontSize:9, fontWeight:700, padding:"3px 8px", textDecoration:"none"}}>{it.k} ↗</a>
+                        <a key={it.k} href={it.href} target="_blank" rel="noreferrer" style={{border:"1px solid var(--border)", background:"var(--accent)", color:"var(--accent-fg)", fontFamily:"var(--font-mono)", fontSize:10.5, fontWeight:700, padding:"3px 8px", textDecoration:"none"}}>{it.k} ↗</a>
                       ))}
                     </div>
                   ) : null; })()}
@@ -3506,7 +3507,7 @@ export default function Home(){
                   <div style={{display:"flex", gap:6, justifyContent:"flex-end", marginTop:12}}>
                     {selectedProfileUid!==user.uid && <button className="btn btn-primary" onClick={()=>{startDM(selectedProfileUid!); setSelectedProfileUid(null);}}>DM GÖNDER</button>}
                     {selectedProfileUid!==user.uid && (friends.some(f=>f.uid===selectedProfileUid) ? (
-  <button className="btn" onClick={()=>void removeFriend(selectedProfileUid)} style={{color:"#ff3b30"}}>ARKADAŞLIĞI BİTİR</button>
+  <button className="btn" onClick={()=>void removeFriend(selectedProfileUid)} style={{color:"var(--danger)"}}>ARKADAŞLIĞI BİTİR</button>
 ) : sentRequests[selectedProfileUid] ? (
   <button className="btn" onClick={()=>void cancelFriendRequest(selectedProfileUid)}>İSTEK GÖNDERİLDİ — GERİ ÇEK</button>
 ) : (
@@ -3525,16 +3526,16 @@ export default function Home(){
           <div onClick={e=>e.stopPropagation()} style={{maxWidth:"92vw", maxHeight:"88vh", display:"flex", flexDirection:"column", gap:8}}>
             <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", fontFamily:"var(--font-mono)", fontSize:11}}>
               <span>{lightbox.name}</span>
-              <button onClick={()=>setLightbox(null)} style={{border:"1px solid #fff", background:"#000", color:"#fff", width:26, height:26}}>✕</button>
+              <button onClick={()=>setLightbox(null)} style={{border:"1px solid var(--accent)", background:"var(--bg)", color:"var(--text)", width:26, height:26}}><span className="icon"><Icon name="close" size={12}/></span></button>
             </div>
-            <img src={lightbox.src} alt={lightbox.name} style={{maxWidth:"92vw", maxHeight:"82vh", border:"2px solid #fff", objectFit:"contain"}}/>
+            <img src={lightbox.src} alt={lightbox.name} style={{maxWidth:"92vw", maxHeight:"82vh", border:"2px solid var(--accent)", objectFit:"contain"}}/>
           </div>
         </div>
       )}
       {cropTarget && (
         <div className="modal-backdrop" onClick={()=>{ if(cropTarget) URL.revokeObjectURL(cropTarget.url); setCropTarget(null);}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{width:"min(440px, 96vw)", overflow:"hidden"}}>
-            <div className="modal-head"><span>{cropTarget.type==="avatar" ? "AVATAR — KIRP" : "BANNER — KIRP"}</span><button onClick={()=>{ URL.revokeObjectURL(cropTarget.url); setCropTarget(null);}}>✕</button></div>
+            <div className="modal-head"><span>{cropTarget.type==="avatar" ? "AVATAR — KIRP" : "BANNER — KIRP"}</span><button onClick={()=>{ URL.revokeObjectURL(cropTarget.url); setCropTarget(null);}}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div style={{padding:14, display:"flex", flexDirection:"column", gap:12}}>
               <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center"}}>
                 {cropTarget.type==="avatar" ? "yuvarlak alan kaydedilecek — sürükle ortala, zoomla" : "sürükle Y eksenini ayarla — banner 112px yüksek"}
@@ -3553,7 +3554,7 @@ export default function Home(){
                   maxWidth: 360,
                   margin: cropTarget.type==="avatar" ? "0 auto" : "0",
                   border:"1px solid var(--border)",
-                  background:"#0a0a0a",
+                  background:"var(--bg)",
                   position:"relative",
                   overflow:"hidden",
                   cursor: dragging ? "grabbing" : "grab",
@@ -3577,22 +3578,22 @@ export default function Home(){
                 {cropTarget.type==="avatar" ? (
                   <>
                     <div style={{position:"absolute", inset:0, background:"rgba(0,0,0,.55)", pointerEvents:"none"}}/>
-                    <div style={{position:"absolute", left:"50%", top:"50%", width:180, height:180, transform:"translate(-50%, -50%)", border:"2px solid #fff", borderRadius:"50%", boxShadow:"0 0 0 200vmax rgba(0,0,0,.55)", pointerEvents:"none"}}/>
+                    <div style={{position:"absolute", left:"50%", top:"50%", width:180, height:180, transform:"translate(-50%, -50%)", border:"2px solid var(--accent)", borderRadius:"50%", boxShadow:"0 0 0 200vmax rgba(0,0,0,.55)", pointerEvents:"none"}}/>
                     <div style={{position:"absolute", inset:0, pointerEvents:"none", backgroundImage:"linear-gradient(to right, rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.08) 1px, transparent 1px)", backgroundSize:"20px 20px", opacity:.15}}/>
                   </>
                 ) : (
                   <>
                     <div style={{position:"absolute", inset:0, border:"1px dashed rgba(255,255,255,.25)", pointerEvents:"none"}}/>
-                    <div style={{position:"absolute", left:0, right:0, top:"50%", height:1, background:"#fff", opacity:.8, pointerEvents:"none"}}/>
-                    <div style={{position:"absolute", left:"50%", top:8, transform:"translateX(-50%)", background:"#fff", color:"#000", fontFamily:"var(--font-mono)", fontSize:9, padding:"2px 6px"}}>112px</div>
+                    <div style={{position:"absolute", left:0, right:0, top:"50%", height:1, background:"var(--accent)", opacity:.8, pointerEvents:"none"}}/>
+                    <div style={{position:"absolute", left:"50%", top:8, transform:"translateX(-50%)", background:"var(--accent)", color:"var(--accent-fg)", fontFamily:"var(--font-mono)", fontSize:10.5, padding:"2px 6px"}}>112px</div>
                   </>
                 )}
               </div>
               <div style={{display:"flex", alignItems:"center", gap:8, border:"1px solid var(--border)", background:"var(--surface-2)", padding:"8px 10px"}}>
                 <span style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>ZOOM</span>
-                 <button onClick={()=>setCropZoom(z=>Math.max(0.5, z-0.1))} style={{width:24, height:24, border:"1px solid var(--border)", background:"#000", color:"#fff"}}>−</button>
-                 <input type="range" min={0.5} max={2.2} step={0.05} value={cropZoom} onChange={e=>setCropZoom(parseFloat(e.target.value))} style={{flex:1, accentColor:"#fff"}} />
-                <button onClick={()=>setCropZoom(z=>Math.min(2.2, z+0.1))} style={{width:24, height:24, border:"1px solid var(--border)", background:"#000", color:"#fff"}}>+</button>
+                 <button onClick={()=>setCropZoom(z=>Math.max(0.5, z-0.1))} style={{width:24, height:24, border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)"}}>−</button>
+                 <input type="range" min={0.5} max={2.2} step={0.05} value={cropZoom} onChange={e=>setCropZoom(parseFloat(e.target.value))} style={{flex:1, accentColor:"var(--accent)"}} />
+                <button onClick={()=>setCropZoom(z=>Math.min(2.2, z+0.1))} style={{width:24, height:24, border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)"}}>+</button>
                 <span style={{fontFamily:"var(--font-mono)", fontSize:10, border:"1px solid var(--border)", padding:"3px 6px", minWidth:42, textAlign:"center"}}>{Math.round(cropZoom*100)}%</span>
                  <button className="btn" onClick={()=>{setCropPos({x:0,y:0}); setCropZoom(0.5);}} style={{fontSize:10, padding:"4px 8px"}}>RESET</button>
               </div>
@@ -3716,7 +3717,7 @@ export default function Home(){
               <div className="call-head">
                 <div>
                   <div className="call-title">● {callTitle}</div>
-                  <div style={{fontFamily:"var(--font-mono)", fontSize:10, color: deafen ? "#f23f42" : "var(--muted)", marginTop:2}}>{deafen ? "sağır — ses kapalı" : micMuted ? "mikrofon kapalı" : "canlı — konuş"}</div>
+                  <div style={{fontFamily:"var(--font-mono)", fontSize:10, color: deafen ? "var(--dnd)" : "var(--muted)", marginTop:2}}>{deafen ? "sağır — ses kapalı" : micMuted ? "mikrofon kapalı" : "canlı — konuş"}</div>
                 </div>
                 <button className="call-min" onClick={()=>setCallPip(true)} title="Küçült"><span className="icon"><Icon name="minimize" size={14}/></span></button>
               </div>
@@ -3786,7 +3787,7 @@ export default function Home(){
               </div>
               {screenSharing && (
                 <div style={{display:"flex", alignItems:"center", gap:8, justifyContent:"center", marginTop:10}}>
-                  <span style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>🖥 PAYLAŞIM — {screenSettings.w}×{screenSettings.h} @ {screenSettings.fps}fps</span>
+                  <span style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", display:"inline-flex", alignItems:"center", gap:6}}><span className="icon"><Icon name="screen" size={12}/></span> PAYLAŞIM — {screenSettings.w}×{screenSettings.h} @ {screenSettings.fps}fps</span>
                   <button className="screen-settings-btn" onClick={()=>setShowScreenPanel(true)}>AYAR</button>
                 </div>
               )}
@@ -3794,11 +3795,11 @@ export default function Home(){
                 <div className="screen-panel">
                   <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, marginBottom:10}}>EKRAN PAYLAŞIM AYARLARI</div>
                   <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
-                    <label style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>ÇÖZÜNÜRLÜK<select value={`${screenSettings.w}x${screenSettings.h}`} onChange={e=>{const [w,h]=e.target.value.split("x").map(Number); setScreenSettings(s=>({...s, w, h}));}} style={{width:"100%", background:"#000", color:"#fff", border:"1px solid var(--border)", padding:"6px", marginTop:4}}>
+                    <label style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>ÇÖZÜNÜRLÜK<select value={`${screenSettings.w}x${screenSettings.h}`} onChange={e=>{const [w,h]=e.target.value.split("x").map(Number); setScreenSettings(s=>({...s, w, h}));}} style={{width:"100%", background:"var(--bg)", color:"var(--text)", border:"1px solid var(--border)", padding:"6px", marginTop:4}}>
                       <option value="1280x720">720p (1280×720)</option>
                       <option value="1920x1080">1080p (1920×1080)</option>
                     </select></label>
-                    <label style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>KARE HIZI (FPS)<select value={screenSettings.fps} onChange={e=>setScreenSettings(s=>({...s, fps:Number(e.target.value)}))} style={{width:"100%", background:"#000", color:"#fff", border:"1px solid var(--border)", padding:"6px", marginTop:4}}>
+                    <label style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>KARE HIZI (FPS)<select value={screenSettings.fps} onChange={e=>setScreenSettings(s=>({...s, fps:Number(e.target.value)}))} style={{width:"100%", background:"var(--bg)", color:"var(--text)", border:"1px solid var(--border)", padding:"6px", marginTop:4}}>
                       <option value={15}>15 fps</option>
                       <option value={30}>30 fps</option>
                       <option value={60}>60 fps</option>
@@ -3850,9 +3851,9 @@ function Landing({onLogin, onRegister}: {onLogin:()=>void, onRegister:()=>void})
           <div className="term-head"><span>AKAYROOM.SYS // LIVE</span><span>● REC</span></div>
           <div className="term-body">
             <div><span className="prompt">operator@akayroom</span> ./init --server AKAY-ops</div>
-            <div style={{color:"#fff"}}>  ▸ sunucu kuruldu — #genel #sesli-oda</div>
+            <div style={{color:"var(--text)"}}>  ▸ sunucu kuruldu — #genel #sesli-oda</div>
             <div><span className="prompt">operator@akayroom</span> ./invite --create</div>
-            <div style={{color:"#fff"}}>  ▸ davet: <b style={{background:"#fff", color:"#000", padding:"0 4px"}}>X7K9PQ</b> — paylaş ve başla</div>
+            <div style={{color:"var(--text)"}}>  ▸ davet: <b style={{background:"var(--accent)", color:"var(--accent-fg)", padding:"0 4px"}}>X7K9PQ</b> — paylaş ve başla</div>
             <div><span className="prompt">operator@akayroom</span> ./msg #genel "ilk sinyal"</div>
             <div style={{opacity:.6}}>  ▸ low-latency • 12ms • WebRTC</div>
           </div>
@@ -3905,7 +3906,7 @@ function AuthScreen(props:{registerMode:boolean; setRegisterMode:(v:boolean)=>vo
   return (
     <main className="auth-screen">
       <section className="auth-card animate-slide">
-      <button onClick={props.onBack} style={{position:"absolute", top:8, right:8, border:"1px solid var(--border)", background:"transparent", width:24, height:24, display:"grid", placeItems:"center", fontSize:12}}>✕</button>
+      <button onClick={props.onBack} style={{position:"absolute", top:8, right:8, border:"1px solid var(--border)", background:"transparent", width:24, height:24, display:"grid", placeItems:"center", fontSize:12}}><span className="icon"><Icon name="close" size={12}/></span></button>
         <div className="auth-logo">AR</div>
         <h1>{props.registerMode ? "KATIL" : "GİRİŞ"}</h1>
         <p className="auth-subtitle">siyah-beyaz, tek operatör. gürültü yok.</p>
