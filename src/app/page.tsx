@@ -33,6 +33,7 @@ import { normalizeUsername, usernameEmail, validUsername } from "@/lib/username"
 import { initials, fmtSize, fileToDataUrl, compressImage, attachmentKind, fmtTime, fmtDate } from "@/lib/format";
 import { EMOJIS, QUICK_REACTIONS, DECORATIONS, PRONOUNS_LIST, fallbackServers, fallbackChannels, fallbackCats } from "@/lib/constants";
 import { normalizeRepoArg, fetchGithubRepo, fetchMusicCard, fetchNowPlaying, searchGifs as searchGifsApi } from "@/lib/api";
+import { uploadAttachment, storageDownloadUrl, attachmentStoragePath } from "@/lib/storage";
 import { Icon } from "@/components/Icon";
 import { RenderContent, SearchHighlight } from "@/components/RenderContent";
 import type { Channel, ChatMessage, Category, MessageAttachmentMeta, Server, UserConnections, UserProfile, GithubCard, MusicCard } from "@/lib/types";
@@ -1064,51 +1065,89 @@ export default function Home(){
     }
     let attMeta: MessageAttachmentMeta | null = null;
     let attData: string | null = null;
+    let storagePath: string | null = null;
+    let storageToken: string | null = null;
     if(pendingFile){
       setSendingAttachment(true);
       try{
         const kind = attachmentKind(pendingFile.file);
         attMeta = { type: kind, name: pendingFile.file.name, size: pendingFile.file.size };
+        const mime = pendingFile.file.type || "application/octet-stream";
         attData = (kind==="image" && pendingFile.preview) ? pendingFile.preview : await fileToDataUrl(pendingFile.file);
         if(attData.length > 9.5*1024*1024){ setToast("dosya çok büyük — sıkıştırılamadı"); setSendingAttachment(false); return; }
+        const msgRef=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
+        const storageKey = attachmentStoragePath(selectedServer, selectedChannel, msgRef.key!, pendingFile.file.name);
+        try{
+          const token = await uploadAttachment(storageKey, attData, mime);
+          storagePath = storageKey;
+          storageToken = token;
+        }catch{
+          setToast("Storage yüklenemedi — RTDB'ye kaydediliyor");
+          storagePath = null;
+          storageToken = null;
+        }
+        const payload: any = {
+          serverId:selectedServer, channelId:selectedChannel, authorId:user.uid,
+          content: content || (attMeta ? `[dosya] ${attMeta.name}` : ""),
+          authorName: profile?.displayName ?? profile?.username ?? username ?? "anon",
+          createdAt: Date.now(),
+        };
+        if(attMeta){
+          payload.attachment = attMeta;
+          if(storagePath && storageToken){
+            (payload.attachment as any).storagePath = storagePath;
+            (payload.attachment as any).storageToken = storageToken;
+          }
+        }
+        if(replyTo) payload.replyTo={ id: replyTo.id, authorName: replyTo.authorName, content: replyTo.content.slice(0,120) };
+        const optimisticId = msgRef.key!;
+        const optimisticMsg: ChatMessage = { id: optimisticId, ...payload, createdAt: payload.createdAt } as ChatMessage;
+        if(attMeta && attData){ (optimisticMsg as any)._localPreview = attData; }
+        setMessages(prev=> [...prev, optimisticMsg]);
+        if(attMeta && attData){ setAttCache(prev=> ({...prev, [optimisticId]: {loading:false, dataUrl: attData!, mime, type: attMeta!.type}})); }
+        setComposerSending(true); setTimeout(()=>setComposerSending(false), 280);
+        messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
+        try{
+          await set(msgRef,payload);
+          if(attMeta && attData && msgRef.key && !storagePath){
+            try{
+              await set(ref(db,`attachments/${selectedServer}/${selectedChannel}/${msgRef.key}`),{authorId:user.uid,type:attMeta.type,name:attMeta.name,mime:mime,size:attMeta.size,data:attData});
+            }catch{ setToast("ek yüklenemedi"); }
+          }
+          setDraft(""); updateDraft(""); setReplyTo(null); setPendingFile(null); setSendingAttachment(false);
+          remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
+        }catch(e:any){
+          setMessages(prev=> prev.filter(m=>m.id!==optimisticId));
+          setAttCache(prev=>{ const n={...prev}; delete n[optimisticId]; return n; });
+          setToast(e?.message ? `mesaj gönderilemedi: ${e.message.slice(0,80)}` : "mesaj gönderilemedi — bağlantını kontrol et");
+          setSendingAttachment(false);
+        }
       }catch{
         setToast("dosya okunamadı");
         setSendingAttachment(false);
-        return;
       }
+      return;
     }
     const msgRef=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
     const payload: any = {
       serverId:selectedServer, channelId:selectedChannel, authorId:user.uid,
-      content: content || (attMeta ? `[dosya] ${attMeta.name}` : ""),
+      content: content || "",
       authorName: profile?.displayName ?? profile?.username ?? username ?? "anon",
       createdAt: Date.now(),
     };
-    if(attMeta) payload.attachment = attMeta;
     if(replyTo) payload.replyTo={ id: replyTo.id, authorName: replyTo.authorName, content: replyTo.content.slice(0,120) };
-    // optimistic + anlık animasyon
     const optimisticId = msgRef.key!;
     const optimisticMsg: ChatMessage = { id: optimisticId, ...payload, createdAt: payload.createdAt } as ChatMessage;
-    if(attMeta && attData){ (optimisticMsg as any)._localPreview = attData; }
     setMessages(prev=> [...prev, optimisticMsg]);
-    if(attMeta && attData){ setAttCache(prev=> ({...prev, [optimisticId]: {loading:false, dataUrl: attData!, mime: pendingFile?.file.type, type: attMeta!.type}})); }
     setComposerSending(true); setTimeout(()=>setComposerSending(false), 280);
     messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
     try{
       await set(msgRef,payload);
-      if(attMeta && attData && msgRef.key){
-        try{
-          await set(ref(db,`attachments/${selectedServer}/${selectedChannel}/${msgRef.key}`),{authorId:user.uid,type:attMeta.type,name:attMeta.name,mime:pendingFile?.file.type||"application/octet-stream",size:attMeta.size,data:attData});
-        }catch{ setToast("ek yüklenemedi"); }
-      }
-      setDraft(""); updateDraft(""); setReplyTo(null); setPendingFile(null); setSendingAttachment(false);
+      setDraft(""); updateDraft(""); setReplyTo(null); setPendingFile(null);
       remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
     }catch(e:any){
-      // geri al optimistic
       setMessages(prev=> prev.filter(m=>m.id!==optimisticId));
-      setAttCache(prev=>{ const n={...prev}; delete n[optimisticId]; return n; });
       setToast(e?.message ? `mesaj gönderilemedi: ${e.message.slice(0,80)}` : "mesaj gönderilemedi — bağlantını kontrol et");
-      setSendingAttachment(false);
     }
   }
 
@@ -1126,7 +1165,15 @@ export default function Home(){
   }
 
   async function loadAttachment(m: ChatMessage){
-    if(!m.attachment) return;
+    const att = m.attachment;
+    if(!att) return;
+    const storagePath = (att as any).storagePath;
+    const storageToken = (att as any).storageToken;
+    if(storagePath && storageToken){
+      const url = storageDownloadUrl(storagePath, storageToken);
+      setAttCache(prev=>({...prev,[m.id]:{loading:false,dataUrl:url,mime:(att as any).mime,type:att.type,fromStorage:true}}));
+      return;
+    }
     setAttCache(prev=>({...prev,[m.id]:{loading:true}}));
     try{
       const s=await get(ref(db,`attachments/${m.serverId}/${m.channelId}/${m.id}`));
@@ -1142,13 +1189,25 @@ export default function Home(){
   }
 
   async function downloadAttachment(m: ChatMessage){
-    if(!m.attachment) return;
+    const att = m.attachment;
+    if(!att) return;
+    const storagePath = (att as any).storagePath;
+    const storageToken = (att as any).storageToken;
+    if(storagePath && storageToken){
+      const url = storageDownloadUrl(storagePath, storageToken);
+      if(att.type==="image"){
+        const res = await fetch(url).catch(()=>null);
+        if(res?.ok){ const blob = await res.blob(); const blobUrl = URL.createObjectURL(blob); const a=document.createElement("a"); a.href=blobUrl; a.download=att.name||"dosya"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(blobUrl), 5000); return; }
+      }
+      window.open(url, "_blank");
+      return;
+    }
     let c=attCache[m.id];
     if(!c?.dataUrl){ await loadAttachment(m); c=attCache[m.id]; }
     const dataUrl=c?.dataUrl;
     if(!dataUrl){ setToast(c?.error||"indirilemedi"); return; }
     const a=document.createElement("a");
-    a.href=dataUrl; a.download=m.attachment.name||"dosya";
+    a.href=dataUrl; a.download=att.name||"dosya";
     document.body.appendChild(a); a.click(); a.remove();
   }
 

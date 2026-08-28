@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "attachments": {
+      "$serverId": {
+        "$channelId": {
+          "$file": {
+            ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
+            ".write": "auth != null && (!data.exists() || data.child('authorId').val() === auth.uid) && root.child('serverMembers').child($serverId).child(auth.uid).exists()"
+          }
+        }
+      }
+    }
+  }
+}

@@ -86,6 +86,8 @@ export type MessageAttachmentMeta = {
   type: "image" | "video" | "audio" | "file";
   name: string;
   size: number;
+  storagePath?: string;
+  storageToken?: string;
 };
 
 export type GithubCard = {
