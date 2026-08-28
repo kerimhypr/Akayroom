@@ -182,9 +182,17 @@ export default function Home(){
   });
 
   const messagesEndRef=useRef<HTMLDivElement>(null);
+  const messageAreaRef=useRef<HTMLDivElement>(null);
   const typingTimeout=useRef<NodeJS.Timeout | null>(null);
   const lastTypingSentRef=useRef<number>(0);
   const composerRef=useRef<HTMLTextAreaElement>(null);
+  const oldestTsRef=useRef<number>(Infinity);
+  const hasMoreRef=useRef<boolean>(true);
+  const loadedIdsRef=useRef<Set<string>>(new Set());
+  const userAtBottomRef=useRef<boolean>(true);
+  const loadingOlderRef=useRef<boolean>(false);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
   useEffect(()=>{ return ()=>{ if(typingTimeout.current) clearTimeout(typingTimeout.current); } },[selectedChannel]);
   // tek müzik çalma: bir preview çalarken diğerlerini durdur
   useEffect(()=>{
@@ -324,14 +332,97 @@ export default function Home(){
     if(!selectedChannel) return;
     const ch = channels.find(c=>c.id===selectedChannel);
     if(ch?.type==="voice") { setMessages([]); return; }
-    const mq=query(ref(db,`messages/${selectedServer}/${selectedChannel}`),orderByChild("createdAt"),limitToLast(100));
-    return onValue(mq,(snap)=>{
-      const next:ChatMessage[]=[];
-      snap.forEach(it=>{ next.push({id:it.key??"", ...(it.val() as Omit<ChatMessage,"id">)}); });
-      next.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
-      setMessages(next);
+    oldestTsRef.current = Infinity;
+    hasMoreRef.current = true;
+    loadedIdsRef.current = new Set();
+    userAtBottomRef.current = true;
+    loadingOlderRef.current = false;
+    setMessages([]);
+    const msgPath = `messages/${selectedServer}/${selectedChannel}`;
+    const initQ = query(ref(db,msgPath),orderByChild("createdAt"),limitToLast(50));
+    let cancelled = false;
+    void (async ()=>{
+      try{
+        const snap = await get(initQ);
+        if(cancelled || !snap.exists()) return;
+        const arr: ChatMessage[] = [];
+        snap.forEach(it=>{ arr.push({id:it.key??"", ...(it.val() as Omit<ChatMessage,"id">)}); });
+        arr.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+        const ids = new Set<string>();
+        arr.forEach(m=>ids.add(m.id));
+        loadedIdsRef.current = ids;
+        oldestTsRef.current = arr.length>0 ? (arr[0].createdAt||0) : Infinity;
+        hasMoreRef.current = arr.length>=50;
+        if(!cancelled) setMessages(arr);
+      }catch{}
+    })();
+    const u = onChildAdded(ref(db,msgPath),(snap)=>{
+      const m = snap.val() as ChatMessage;
+      const id = snap.key;
+      if(!id || loadedIdsRef.current.has(id)) return;
+      loadedIdsRef.current.add(id);
+      setMessages(prev=>[...prev,{id, ...(m as Omit<ChatMessage,"id">)}]);
+      if((m.createdAt||0) < oldestTsRef.current) oldestTsRef.current = m.createdAt||0;
     });
+    return ()=>{ cancelled=true; try{u();}catch{} };
   },[user,selectedServer,selectedChannel,channels,activeView]);
+
+  const loadOlder = async ()=>{
+    if(!user || selectedServer==="demo" || !selectedChannel) return;
+    if(!hasMoreRef.current || loadingOlderRef.current) return;
+    const oldest = oldestTsRef.current;
+    if(oldest===Infinity) return;
+    loadingOlderRef.current = true;
+    const area = messageAreaRef.current;
+    const prevScrollHeight = area?.scrollHeight || 0;
+    const prevFirstId = messagesRef.current[0]?.id;
+    try{
+      const msgPath = `messages/${selectedServer}/${selectedChannel}`;
+      const q = query(ref(db,msgPath),orderByChild("createdAt"),endAt(oldest-1),limitToLast(50));
+      const snap = await get(q);
+      if(!snap.exists()){ hasMoreRef.current=false; loadingOlderRef.current=false; return; }
+      const arr: ChatMessage[] = [];
+      snap.forEach(it=>{ arr.push({id:it.key??"", ...(it.val() as Omit<ChatMessage,"id">)}); });
+      arr.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+      const newIds = new Set<string>();
+      const newMsgs = arr.filter(m=>{ if(loadedIdsRef.current.has(m.id)||newIds.has(m.id)) return false; newIds.add(m.id); return true; });
+      if(newMsgs.length===0){ hasMoreRef.current=false; loadingOlderRef.current=false; return; }
+      newMsgs.forEach(m=>loadedIdsRef.current.add(m.id));
+      setMessages(prev=>{
+        const merged = [...newMsgs,...prev];
+        return merged;
+      });
+      const newOldest = newMsgs[0]?.createdAt||0;
+      if(newOldest<oldestTsRef.current) oldestTsRef.current=newOldest;
+      hasMoreRef.current = newMsgs.length>=50;
+      requestAnimationFrame(()=>{
+        if(area && prevFirstId){
+          const el = area.querySelector(`[data-msg-id="${prevFirstId}"]`) as HTMLElement|null;
+          if(el){
+            const newTop = area.scrollTop + el.offsetTop;
+            area.scrollTop = newTop;
+          } else if(prevScrollHeight>0){
+            area.scrollTop = (area.scrollHeight - prevScrollHeight);
+          }
+        }
+      });
+    }catch{}
+    loadingOlderRef.current=false;
+  };
+
+  useEffect(()=>{
+    const area = messageAreaRef.current;
+    if(!area) return;
+    const onScroll=()=>{
+      const atBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 60;
+      userAtBottomRef.current = atBottom;
+      if(area.scrollTop < 200 && hasMoreRef.current && !loadingOlderRef.current){
+        void loadOlder();
+      }
+    };
+    area.addEventListener("scroll",onScroll,{passive:true});
+    return ()=> area.removeEventListener("scroll",onScroll);
+  },[user,selectedServer,selectedChannel,activeView]);
 
   useEffect(()=>{
     if(!user || selectedServer==="demo") return;
@@ -905,7 +996,11 @@ export default function Home(){
     }
   },[showUserSettings]);
 
-  useEffect(()=>{ messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); },[messages,threadMessages, dmMsgs]);
+  useEffect(()=>{
+    if(userAtBottomRef.current){
+      messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
+    }
+  },[messages,threadMessages, dmMsgs]);
   useEffect(()=>{
     const h=(e:KeyboardEvent)=>{
       if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="k"){ e.preventDefault(); setShowPalette(v=>!v); }
@@ -2350,7 +2445,7 @@ export default function Home(){
               </div>
             </header>
 
-            <div className="message-area" onClick={()=>{setShowEmoji(false); setShowGif(false); setShowPlusMenu(false);}}>
+            <div className="message-area" ref={messageAreaRef} onClick={()=>{setShowEmoji(false); setShowGif(false); setShowPlusMenu(false);}}>
               {helpOpen && (
                 <div style={{margin:"10px 16px", border:"1px solid var(--accent)", background:"var(--surface)", padding:12, alignSelf:"center", width:"min(440px, 92%)"}} onClick={e=>e.stopPropagation()}>
                   <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
@@ -2402,6 +2497,12 @@ export default function Home(){
                 </div>
               ) : (
                 <>
+                  {loadingOlderRef.current && (
+                    <div style={{textAlign:"center",padding:8,fontFamily:"var(--font-mono)",fontSize:11,color:"var(--muted)"}}>eski mesajlar yükleniyor…</div>
+                  )}
+                  {!hasMoreRef.current && filteredMessages.length>0 && (
+                    <div style={{textAlign:"center",padding:8,fontFamily:"var(--font-mono)",fontSize:11,color:"var(--dim)",borderBottom:"1px dashed var(--border)",marginBottom:8}}>— kanalın başı —</div>
+                  )}
                   <div className="divider">{fmtDate(filteredMessages[0]?.createdAt || Date.now())}</div>
                   {filteredMessages.map((m, idx)=>{
                     const prev=filteredMessages[idx-1];
@@ -2410,7 +2511,7 @@ export default function Home(){
                     const isMe = user.uid===m.authorId;
                     const isEditing = editingId===m.id;
                     return (
-                      <div key={m.id} className={`message-row msg-animate ${isGrouped?"grouped":""}`} onContextMenu={e=>{ e.preventDefault(); setContextMenu({x:e.clientX, y:e.clientY, msg:m});}}>
+                      <div key={m.id} data-msg-id={m.id} className={`message-row msg-animate ${isGrouped?"grouped":""}`} onContextMenu={e=>{ e.preventDefault(); setContextMenu({x:e.clientX, y:e.clientY, msg:m});}}>
                         {isGrouped && <div className="group-time">{fmtTime(m.createdAt).slice(0,5)}</div>}
                         <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorName||"??")}</button>
                         <div className="msg-body">
