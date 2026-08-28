@@ -26,7 +26,7 @@ services:
       - key: NEXT_PUBLIC_FIREBASE_APP_ID
         sync: false
       - key: NEXT_PUBLIC_GIPHY_API_KEY
-        sync: false
+        value: R8c1dYdCtzP7qoeRcFqk7hCjex1lNSYZ
 
   - type: worker
     name: ghostgrid-twin

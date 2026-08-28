@@ -2034,7 +2034,7 @@ export default function Home(){
                     if(chans.length===0) return null;
                     return (
                       <div key={cat.id}>
-                        <div className="category-label">{cat.name} <span onClick={()=>setShowCreateChannel(true)}>＋</span></div>
+                        <div className="category-label">{cat.name} {(()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; return ok ? <span onClick={()=>setShowCreateChannel(true)}>＋</span> : null;})()}</div>
                         {chans.map(ch=>(
                           <div key={ch.id} style={{position:"relative"}}>
                             <button
@@ -2049,10 +2049,12 @@ export default function Home(){
                               <span className="ch-icon"><span className="icon">{ch.type==="voice" ? <Icon name="voice" size={13}/> : <Icon name="hash" size={13}/>}</span></span>
                               <span className="ch-name">{ch.name}</span>
                               {ch.type==="voice" && <span style={{fontSize:10, opacity:.5}}>●</span>}
+                              {(()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; return ok ? (
                               <span style={{marginLeft:"auto", display:"flex", gap:2, opacity:0}} className="ch-actions-hover">
                                 <span onClick={e=>{e.stopPropagation(); setEditingChannel(ch); setEditChannelName(ch.name); setEditChannelTopic(ch.topic||"");}} style={{border:"1px solid var(--border)", width:18, height:18, display:"grid", placeItems:"center"}} title="Düzenle"><span className="icon"><Icon name="edit" size={10}/></span></span>
                                 <span onClick={e=>{e.stopPropagation(); deleteChannel(ch.id);}} style={{border:"1px solid var(--border)", width:18, height:18, display:"grid", placeItems:"center"}} title="Sil"><span className="icon"><Icon name="trash" size={10}/></span></span>
                               </span>
+                              ) : null;})()}
                             </button>
                           </div>
                         ))}
@@ -2060,16 +2062,16 @@ export default function Home(){
                     );
                   })}
                 </div>
-                {channelMenu && (
+                {channelMenu && (()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; return (
                   <div className="context-menu" style={{left:channelMenu.x, top:channelMenu.y}} onClick={e=>e.stopPropagation()}>
                     <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:"4px 8px", borderBottom:"1px solid var(--border)"}}>#{channelMenu.channel.name}</div>
                     <div className="context-item" onClick={()=>{ setSelectedChannel(channelMenu.channel.id); if(channelMenu.channel.type==="voice") setJoinedVoice(channelMenu.channel.id); setChannelMenu(null); }}><span className="icon"><Icon name="hash" size={12}/></span> Kanala Git</div>
                     <div className="context-item" onClick={()=>{ startCall(); setChannelMenu(null); }}><span className="icon"><Icon name="phone" size={12}/></span> Sesli arama</div>
-                    <div className="context-item" onClick={()=>{ setEditingChannel(channelMenu.channel); setEditChannelName(channelMenu.channel.name); setEditChannelTopic(channelMenu.channel.topic||""); setChannelMenu(null); }}><span className="icon"><Icon name="settings" size={12}/></span> Düzenle</div>
+                    {ok && <div className="context-item" onClick={()=>{ setEditingChannel(channelMenu.channel); setEditChannelName(channelMenu.channel.name); setEditChannelTopic(channelMenu.channel.topic||""); setChannelMenu(null); }}><span className="icon"><Icon name="settings" size={12}/></span> Düzenle</div>}
                     <div className="context-item" onClick={()=>{ navigator.clipboard.writeText(`#${channelMenu.channel.name}`); setToast("kopyalandı"); setChannelMenu(null); }}>⎘ Kopyala</div>
-                    <div className="context-item danger" onClick={()=> deleteChannel(channelMenu.channel.id)}><span className="icon"><Icon name="plus" size={12}/></span> Sil</div>
+                    {ok && <div className="context-item danger" onClick={()=> deleteChannel(channelMenu.channel.id)}><span className="icon"><Icon name="plus" size={12}/></span> Sil</div>}
                   </div>
-                )}
+                );})()}
                 <div className="current-user">
                   <button className="cu-avatar" onClick={()=>openProfile(user.uid)} style={{cursor:"pointer"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</button>
                   <div className="cu-meta">
@@ -2483,8 +2485,11 @@ export default function Home(){
               <div className="header-actions">
                 <div className="header-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ara" /></div>
                 <button onClick={startCall} title="Sesli arama başlat" style={{border: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "1px solid #fff" : "1px solid var(--border)", background: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#fff" : "transparent", color: selectedChannelData?.type==="voice" && joinedVoice===selectedChannel ? "#000" : "var(--muted)"}}><span className="icon"><Icon name="phone"/></span></button>
-                <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo"){ setEditingChannel(selectedChannelData); setEditChannelName(selectedChannelData.name); setEditChannelTopic(selectedChannelData.topic||""); } }} title="Kanalı Düzenle"><span className="icon"><Icon name="settings"/></span></button>
-                <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"#ff3b30", borderColor:"var(--border)"}}>🗑</button>
+                {(()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; if(!ok) return null; return (<>
+                  <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo"){ setEditingChannel(selectedChannelData); setEditChannelName(selectedChannelData.name); setEditChannelTopic(selectedChannelData.topic||""); } }} title="Kanalı Düzenle"><span className="icon"><Icon name="edit" size={12}/></span></button>
+                  <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"#ff3b30"}}><span className="icon"><Icon name="trash" size={12}/></span></button>
+                  <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları"><span className="icon"><Icon name="settings" size={12}/></span></button>
+                </>);})()}
                 <button onClick={()=>setShowPalette(true)}>⌘K</button>
               </div>
             </header>
