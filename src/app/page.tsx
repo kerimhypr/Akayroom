@@ -247,6 +247,9 @@ export default function Home(){
   const [connGithub,setConnGithub]=useState("");
   const [connSpotify,setConnSpotify]=useState("");
   const [connSite,setConnSite]=useState("");
+  const [npSearch,setNpSearch]=useState("");
+  const [npResults,setNpResults]=useState<MusicCard[]|null>(null);
+  const [npLoading,setNpLoading]=useState(false);
   const [gifSearch,setGifSearch]=useState("");
   const [gifResults,setGifResults]=useState<string[]>([]);
   const [toast,setToast]=useState("");
@@ -1268,11 +1271,6 @@ export default function Home(){
         await update(ref(db,`users/${user.uid}/public`),{nowPlaying: np});
         setProfile(p=> p ? {...p, nowPlaying: np} : p);
         setToast(`♪ şimdi dinliyor: ${np.track} — ${np.artist}`);
-        if(selectedServer!=="demo" && selectedChannelData?.type==="text"){
-          const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
-          const card: MusicCard = {trackName: first.trackName, artistName: first.artistName, artworkUrl: (first.artworkUrl100 as string)?.replace("100x100","300x300") ?? first.artworkUrl100, previewUrl: first.previewUrl ?? null, trackViewUrl: first.trackViewUrl, collectionName: first.collectionName, primaryGenre: first.primaryGenreName};
-          await set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, authorName:profile?.displayName??username, content:`🎧 şimdi dinliyor: ${card.trackName} — ${card.artistName}`, createdAt: Date.now(), musicCard: card});
-        }
       }catch(e:any){ setToast(e?.message || "np hatası"); }
       return;
     }
@@ -2200,15 +2198,15 @@ export default function Home(){
                       henüz arkadaş yok — yukarıdan kullanıcı adıyla ekle
                     </div>
                   ) : friends.map(f=>(
-                    <div key={f.uid} className="friend-row">
-                      <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                    <div key={f.uid} className="friend-row" style={{cursor:"pointer"}} onClick={()=>openProfile(f.uid)}>
+                      <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
                       <div style={{flex:1, minWidth:0}}>
                         <div data-friend-name style={{fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
                       </div>
-                      <button className="friend-mini-btn" title="Mesaj" onClick={()=>startDM(f.uid)}><span className="icon"><Icon name="dm" size={12}/></span></button>
-                      <button className="friend-mini-btn" title="Sunucuya davet et" onClick={()=>void inviteFriendToServer(f.uid)}><span className="icon"><Icon name="invite" size={12}/></span></button>
-                      <button className="friend-mini-btn" style={{color:"#ff3b30"}} title="Arkadaşlıktan çıkar" onClick={()=>void removeFriend(f.uid)}>✕</button>
+                      <button className="friend-mini-btn" title="Mesaj" onClick={(e)=>{e.stopPropagation(); startDM(f.uid);}}><span className="icon"><Icon name="dm" size={12}/></span></button>
+                      <button className="friend-mini-btn" title="Sunucuya davet et" onClick={(e)=>{e.stopPropagation(); void inviteFriendToServer(f.uid);}}><span className="icon"><Icon name="invite" size={12}/></span></button>
+                      <button className="friend-mini-btn" style={{color:"#ff3b30"}} title="Arkadaşlıktan çıkar" onClick={(e)=>{e.stopPropagation(); void removeFriend(f.uid);}}>✕</button>
                     </div>
                   ))}
                 </>
@@ -2435,15 +2433,15 @@ export default function Home(){
                 ) : (
                   <div style={{maxWidth:560, margin:"0 auto", width:"100%"}}>
                     {friends.map(f=>(
-                      <div key={f.uid} className="friend-row">
-                        <button className="avatar" onClick={()=>openProfile(f.uid)} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                      <div key={f.uid} className="friend-row" style={{cursor:"pointer"}} onClick={()=>openProfile(f.uid)}>
+                        <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"#111", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
                         <div style={{flex:1, minWidth:0}}>
                           <div data-friend-name style={{fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username}</div>
                           <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
                         </div>
-                        <button className="btn" onClick={()=>startDM(f.uid)}>MESAJ</button>
-                        <button className="btn" onClick={()=>void inviteFriendToServer(f.uid)} title="Sunucuya davet et">DAVET</button>
-                        <button className="btn" style={{color:"#ff3b30"}} onClick={()=>void removeFriend(f.uid)} title="Arkadaşlıktan çıkar">ÇIKAR</button>
+                        <button className="btn" onClick={(e)=>{e.stopPropagation(); startDM(f.uid);}}><span className="icon"><Icon name="dm" size={12}/></span> MESAJ</button>
+                        <button className="btn" onClick={(e)=>{e.stopPropagation(); void inviteFriendToServer(f.uid);}} title="Sunucuya davet et">DAVET</button>
+                        <button className="btn" style={{color:"#ff3b30"}} onClick={(e)=>{e.stopPropagation(); void removeFriend(f.uid);}} title="Arkadaşlıktan çıkar">ÇIKAR</button>
                       </div>
                     ))}
                   </div>
@@ -2818,8 +2816,8 @@ export default function Home(){
               <div className="member-group">
                 <div className="member-group-title">ÇEVRİMİÇİ — {members.length}</div>
                 {members.map(m=>(
-                  <div key={m.uid} className="member-row" style={{alignItems:"flex-start"}}>
-                    <button className="m-av" onClick={()=>openProfile(m.uid)} style={{cursor:"pointer", display:"grid", placeItems:"center"}}>{m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}<i className="status-dot online"/></button>
+                  <div key={m.uid} className="member-row" style={{alignItems:"flex-start", cursor:"pointer"}} onClick={()=>openProfile(m.uid)}>
+                    <button className="m-av" onClick={(e)=>{e.stopPropagation(); openProfile(m.uid);}} style={{cursor:"pointer", display:"grid", placeItems:"center"}}>{m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}<i className="status-dot online"/></button>
                     <div style={{flex:1, minWidth:0}}><div className="m-name">{m.profile?.displayName||m.profile?.username}</div><small>{m.role}</small>{m.profile?.nowPlaying && <small style={{display:"flex", alignItems:"center", gap:4, color:"#1DB954", marginTop:2}}><span style={{fontSize:9}}>♪</span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile.nowPlaying.track} — {m.profile.nowPlaying.artist}</span></small>}</div>
                   </div>
                 ))}
@@ -3217,6 +3215,39 @@ export default function Home(){
                           }}>GÜNCELLE</button>
                         </div>
                       </div>
+                    </div>
+                    <div style={{border:"1px solid #1DB954", background:"#0a1a0f", padding:10}}>
+                      <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, color:"#1DB954", display:"flex", alignItems:"center", gap:6}}><span className="icon"><Icon name="music" size={12}/></span> ŞU AN DİNLİYOR — PROFİLDEN SEÇ</div>
+                      <div style={{fontSize:11, color:"#a3d9b1", marginTop:4}}>iTunes Search (ücretsiz/keysiz) ile ara, profile yazılır — server'a mesaj gitmez.</div>
+                      {profile?.nowPlaying && (
+                        <div style={{marginTop:8, border:"1px solid #1DB954", background:"#000", padding:8, display:"flex", gap:8, alignItems:"center"}}>
+                          {profile.nowPlaying.artwork && <img src={profile.nowPlaying.artwork} alt="" style={{width:40, height:40, flex:"0 0 auto"}}/>}
+                          <div style={{flex:1, minWidth:0}}>
+                            <div style={{fontSize:12, fontWeight:700, overflowWrap:"anywhere"}}>{profile.nowPlaying.track}</div>
+                            <div style={{fontSize:11, color:"var(--muted)", overflowWrap:"anywhere"}}>{profile.nowPlaying.artist}</div>
+                          </div>
+                          <button className="btn" style={{borderColor:"#ff9baf", color:"#ff9baf", flex:"0 0 auto"}} onClick={async()=>{ try{ await update(ref(db,`users/${user.uid}/public`),{nowPlaying:null}); setProfile(p=>p?{...p, nowPlaying:null}:p); setToast("temizlendi"); }catch(e:any){setToast(e.message);} }}>TEMİZLE</button>
+                        </div>
+                      )}
+                      <div style={{display:"flex", gap:6, marginTop:8}}>
+                        <input value={npSearch} onChange={e=>setNpSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){ (e.target as HTMLInputElement).blur(); void (async()=>{ if(!npSearch.trim()) return; setNpLoading(true); try{ const r=await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(npSearch.trim())}&media=music&entity=song&limit=4`); const j=await r.json(); setNpResults((j.results||[]).map((x:any)=>({trackName:x.trackName, artistName:x.artistName, artworkUrl:(x.artworkUrl100 as string)?.replace("100x100","300x300")??x.artworkUrl100, previewUrl:x.previewUrl??null, trackViewUrl:x.trackViewUrl, collectionName:x.collectionName, primaryGenre:x.primaryGenreName}))); }catch{setToast("arama hatası");} setNpLoading(false); })(); }}} placeholder="tarkan — şımarık" style={{flex:1}} />
+                        <button className="btn btn-primary" disabled={npLoading} onClick={async()=>{ if(!npSearch.trim()) return; setNpLoading(true); try{ const r=await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(npSearch.trim())}&media=music&entity=song&limit=4`); const j=await r.json(); setNpResults((j.results||[]).map((x:any)=>({trackName:x.trackName, artistName:x.artistName, artworkUrl:(x.artworkUrl100 as string)?.replace("100x100","300x300")??x.artworkUrl100, previewUrl:x.previewUrl??null, trackViewUrl:x.trackViewUrl, collectionName:x.collectionName, primaryGenre:x.primaryGenreName}))); if((j.results||[]).length===0) setToast("sonuç yok"); }catch{setToast("arama hatası");} setNpLoading(false); }}>{npLoading?"…":"ARA"}</button>
+                      </div>
+                      {npResults && (
+                        <div style={{marginTop:8, display:"flex", flexDirection:"column", gap:6}}>
+                          {npResults.length===0 ? <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", border:"1px dashed var(--border)", padding:8, textAlign:"center"}}>sonuç yok</div> : npResults.map(c=>(
+                            <div key={c.trackViewUrl} style={{display:"flex", gap:8, alignItems:"center", border:"1px solid var(--border)", background:"#000", padding:6}}>
+                              <img src={c.artworkUrl} alt="" style={{width:36, height:36, flex:"0 0 auto"}}/>
+                              <div style={{flex:1, minWidth:0}}>
+                                <div style={{fontSize:12, fontWeight:700, overflowWrap:"anywhere"}}>{c.trackName}</div>
+                                <div style={{fontSize:11, color:"var(--muted)", overflowWrap:"anywhere"}}>{c.artistName} • {c.collectionName}</div>
+                              </div>
+                              <button className="btn btn-primary" style={{flex:"0 0 auto", fontSize:10, padding:"6px 10px"}} onClick={async()=>{ const np={track:c.trackName, artist:c.artistName, artwork:c.artworkUrl, previewUrl:c.previewUrl, url:c.trackViewUrl, genre:c.primaryGenre, updatedAt:Date.now()}; try{ await update(ref(db,`users/${user.uid}/public`),{nowPlaying: np}); setProfile(p=>p?{...p, nowPlaying: np}:p); setNpResults(null); setNpSearch(""); setToast(`♪ ${np.track}`);}catch(e:any){setToast(e.message);} }}>SEÇ</button>
+                            </div>
+                          ))}
+                          <button className="btn" onClick={()=>setNpResults(null)}>KAPAT</button>
+                        </div>
+                      )}
                     </div>
                     <div style={{border:"1px solid #3a0000", background:"#1a0000", padding:10}}>
                       <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700, color:"#ff9baf"}}>HESABI SİL</div>
