@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ClientOnly from "@/components/ClientOnly";
 
 export const metadata: Metadata = {
   title: "AKAYROOM",
@@ -21,5 +22,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="tr"><body>{children}</body></html>;
+  return <html lang="tr"><body><ClientOnly>{children}</ClientOnly></body></html>;
 }
