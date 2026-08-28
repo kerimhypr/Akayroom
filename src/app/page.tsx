@@ -127,6 +127,7 @@ export default function Home(){
   const [callPip,setCallPip]=useState(false);
   const [callPipPos,setCallPipPos]=useState(()=>{
     if(typeof window!=="undefined"){ try{ const p=JSON.parse(localStorage.getItem("akayroom_callPipPos")||"null"); if(p&&typeof p.x==="number"&&typeof p.y==="number") return p; }catch{} }
+    if(typeof window!=="undefined") return {x: Math.max(12, window.innerWidth - 80), y: Math.max(12, window.innerHeight - 80)};
     return {x:12,y:12};
   });
   const [voiceParticipants,setVoiceParticipants]=useState<Record<string, {profile: UserProfile|null, joinedAt:number}>>({});
