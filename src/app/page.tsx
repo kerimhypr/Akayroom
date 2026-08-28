@@ -177,7 +177,21 @@ function RenderContent({ text }: { text: string }) {
                     tokens.push(<blockquote key={`q-${i}-${j}-${k}-${b}-${c}-${d}-${e}`}>{up.slice(2)}</blockquote>);
                     return;
                   }
-                  if (up) tokens.push(<span key={`t-${i}-${j}-${k}-${b}-${c}-${d}-${e}-${tokens.length}`}>{up}</span>);
+                  if (up) {
+                    const urlParts = up.split(/(https?:\/\/[^\s]+)/g);
+                    urlParts.forEach((part, f) => {
+                      if (/^https?:\/\//.test(part)) {
+                        const isImage = /\.(gif|png|jpe?g|webp)(\?|$)/i.test(part) || /giphy\.com|tenor\.com|media\.giphy/i.test(part);
+                        if (isImage) {
+                          tokens.push(<img key={`img-${i}-${j}-${k}-${b}-${c}-${d}-${e}-${f}`} src={part} alt="gif" style={{maxWidth:"220px", maxHeight:"220px", border:"1px solid var(--border)", display:"block", margin:"6px 0"}} onClick={()=>window.open(part,"_blank")} />);
+                        } else {
+                          tokens.push(<a key={`lnk-${i}-${j}-${k}-${b}-${c}-${d}-${e}-${f}`} href={part} target="_blank" rel="noopener noreferrer" style={{color:"#fff", textDecoration:"underline", textUnderlineOffset:"3px"}}>{part}</a>);
+                        }
+                        return;
+                      }
+                      if (part) tokens.push(<span key={`t-${i}-${j}-${k}-${b}-${c}-${d}-${e}-${f}-${tokens.length}`}>{part}</span>);
+                    });
+                  }
                 });
               });
             });
