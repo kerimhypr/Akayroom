@@ -3835,12 +3835,12 @@ function Landing({onLogin, onRegister}: {onLogin:()=>void, onRegister:()=>void})
         </div>
       </nav>
       <section className="landing-hero animate-slide">
-        <div className="landing-badge"><i/> SİYAH — BEYAZ — TERMINAL • v0.4 • BRUTALIST</div>
+        <div className="landing-badge"><i/> CANLI • v0.5 • WEBRTC SES • RTDB</div>
         <h1 className="landing-title">SİNYAL.<br/>GÜRÜLTÜ DEĞİL.<br/><span>Discord rahatlığı,<br/>mühendis sadeliğinde.</span></h1>
         <p className="landing-sub">
           Akayroom, ekipler için tek operatör mantığında kurulmuş minimal comms.
           Sunucu, kanal, ses, DM — hepsi tek sayfada değil, doğru yerde. Gereksiz yok.
-          Siyah-beyaz, 1px border, JetBrains Mono. Hızlı, sessiz, kalıcı.
+          Derin siyah, viyol accent, JetBrains Mono. Hızlı, sessiz, kalıcı.
         </p>
         <div className="landing-cta">
           <button className="btn btn-primary" onClick={onRegister}>ÜCRETSİZ KUR — 30 SN</button>
@@ -3866,7 +3866,7 @@ function Landing({onLogin, onRegister}: {onLogin:()=>void, onRegister:()=>void})
           {icon:"users", title:"ARKADAŞ", desc:"Kullanıcı adıyla ekle, anında DM başlat. Sahte üye yok."},
           {icon:"plus", title:"DAVET & ROL", desc:"6 haneli kod, otomatik katılım. Roller sadece ayarlardan — sayfa kalabalık değil."},
           {icon:"search", title:"ARA & PALET", desc:"⌘K ile kanal/komut ara. Mesajda markdown, tepki, yanıt, pin."},
-          {icon:"settings", title:"MİNIMAL BY DESIGN", desc:"Siyah-beyaz, 1px, mono. Gerekmeyen yerde özellik yok."},
+          {icon:"settings", title:"MİNIMAL BY DESIGN", desc:"Koyu tema, mono detay, akıcı hareket. Gerekmeyen yerde özellik yok."},
         ].map(c=>(
           <div key={c.title} className="landing-card">
             <div className="card-icon"><Icon name={c.icon}/></div>
@@ -3889,7 +3889,7 @@ function Landing({onLogin, onRegister}: {onLogin:()=>void, onRegister:()=>void})
             <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>STACK</div>
             <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", lineHeight:1.8, marginTop:8}}>
               Next.js 15 • Firebase Auth/RTDB • WebRTC stub<br/>
-              JetBrains Mono • 1px brutalist • animasyonlu ama sakin
+              JetBrains Mono • koyu tema & viyol accent • animasyonlu ama sakin
             </div>
           </div>
         </div>
@@ -3909,7 +3909,7 @@ function AuthScreen(props:{registerMode:boolean; setRegisterMode:(v:boolean)=>vo
       <button onClick={props.onBack} style={{position:"absolute", top:8, right:8, border:"1px solid var(--border)", background:"transparent", width:24, height:24, display:"grid", placeItems:"center", fontSize:12}}><span className="icon"><Icon name="close" size={12}/></span></button>
         <div className="auth-logo">AR</div>
         <h1>{props.registerMode ? "KATIL" : "GİRİŞ"}</h1>
-        <p className="auth-subtitle">siyah-beyaz, tek operatör. gürültü yok.</p>
+        <p className="auth-subtitle">tek operatör, tam sinyal. gürültü yok.</p>
         {!props.configured && <div className="setup-note">Firebase .env.local bekleniyor</div>}
         <form onSubmit={props.onSubmit}>
           {props.registerMode && <label>GÖRÜNEN İSİM<input value={props.displayName} onChange={e=>props.setDisplayName(e.target.value)} placeholder="operator" /></label>}
