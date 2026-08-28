@@ -10,6 +10,12 @@
             ".write": "auth != null && auth.uid === $uid"
           }
         },
+        "dmThreads": {
+          ".read": "auth != null && auth.uid === $uid",
+          "$threadId": {
+            ".write": "auth != null && newData.val() === true && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists() && root.child('dmThreads').child($threadId).child('participants').child($uid).exists()"
+          }
+        },
         "public": {
           ".read": "auth != null",
           ".write": "auth != null && auth.uid === $uid",
@@ -125,7 +131,9 @@
           ".read": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()",
           "$messageId": {
             "$emoji": {
-              ".write": "auth != null && root.child('serverMembers').child($serverId).child(auth.uid).exists()"
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && root.child('serverMembers').child($serverId).child(auth.uid).exists()"
+              }
             }
           }
         }
@@ -172,7 +180,7 @@
     },
     "threadMessages": {
       "$threadId": {
-        ".read": "auth != null",
+        ".read": "auth != null && (!root.child('threadMeta').child($threadId).exists() || root.child('serverMembers').child(root.child('threadMeta').child($threadId).child('serverId').val()).child(auth.uid).exists())",
         "$messageId": {
           ".write": "auth != null && !data.exists() && newData.child('authorId').val() === auth.uid",
           ".validate": "newData.hasChildren(['authorId', 'content', 'createdAt'])"
@@ -230,7 +238,6 @@
       }
     },
     "dmThreads": {
-      ".read": "auth != null",
       "$threadId": {
         ".read": "auth != null && data.child('participants').child(auth.uid).exists()",
         ".write": "auth != null && newData.child('participants').child(auth.uid).exists()",
@@ -305,6 +312,12 @@
       "$threadId": {
         ".read": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()",
         ".write": "auth != null && root.child('dmThreads').child($threadId).child('participants').child(auth.uid).exists()"
+      }
+    },
+    "threadMeta": {
+      "$threadId": {
+        ".read": "auth != null",
+        ".write": "auth != null && !data.exists() && newData.hasChildren(['serverId','channelId'])"
       }
     },
     "aiJobs": {

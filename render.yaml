@@ -1,6 +1,6 @@
 services:
   - type: static_site
-    name: ghostgrid
+    name: akayroom-frontend
     branch: main
     buildCommand: npm install && npm run build
     staticPublishPath: out
@@ -26,10 +26,10 @@ services:
       - key: NEXT_PUBLIC_FIREBASE_APP_ID
         sync: false
       - key: NEXT_PUBLIC_GIPHY_API_KEY
-        value: R8c1dYdCtzP7qoeRcFqk7hCjex1lNSYZ
+        sync: false
 
   - type: worker
-    name: ghostgrid-twin
+    name: akayroom-twin
     runtime: node
     branch: main
     region: frankfurt

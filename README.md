@@ -1,47 +1,51 @@
-# Poseidon
+# AKAYROOM
 
-Dark, realtime community workspace built with Next.js, Firebase Auth, Firebase Realtime Database and WebRTC signaling.
+Koyu temalı, gerçek zamanlı topluluk iletişim uygulaması. Next.js 15, Firebase Auth + Realtime Database ve WebRTC mesh sinyalleşmesi ile kuruludur. Metin, sesli/görüntülü arama, ekran paylaşımı, DM, sunucu/kanal yönetimi, anlık tepkiler, anket, GitHub/müzik kartları ve komutlar içerir.
 
-## Local setup
+## Teknoloji
 
-1. Copy `.env.local.example` to `.env.local`.
-2. Create/select your Firebase project and enable **Authentication → Email/Password**.
-3. Create a Realtime Database and paste the Firebase Web App config into `.env.local`.
-4. Sign in to the Firebase CLI:
+- **Frontend:** Next.js 15 (static export), React 19, TypeScript
+- **Veritabanı:** Firebase Realtime Database (bölge: europe-west1)
+- **Kimlik:** Firebase Auth (e-posta/şifre)
+- **Sesli görüşme:** WebRTC mesh (sadece STUN — TURN henüz yok)
+- **Dağıtım:** Render static_site (`out/`)
+
+## Yerel kurulum
+
+1. `.env.local.example` dosyasını `.env.local` olarak kopyala ve Firebase Web App yapılandırmasını gir.
+2. Firebase Console'da **Authentication → Email/Password**'i etkinleştir ve bir Realtime Database oluştur.
+3. Firebase CLI ile giriş yap ve kuralları yükle:
 
 ```bash
 firebase login
-firebase use --add
+firebase use --add      # proje: cizbull
 firebase deploy --only database
 ```
 
-5. Run the app:
+4. Uygulamayı çalıştır:
 
 ```bash
 npm run dev
 ```
 
-The Cerebras key is intentionally not part of the browser app. Cerebras uses the `https://api.cerebras.ai/v1/chat/completions` endpoint and bearer authentication. If AI Twin is enabled, configure it as a Firebase Functions secret:
+> Not: PowerShell'de `npm` betiği çalışmaz. Build için `cmd /c "npm.cmd run build"` kullan.
 
-```bash
-firebase functions:secrets:set CEREBRAS_API_KEY
-firebase deploy --only functions
-```
+## Üretim dağıtımı
 
-The Firebase project, account login, database URL and provider keys remain under the project owner's control.
+Render static_site olarak çalışır: `npm install && npm run build` → `out/` yayınlanır. `main` dalına push otomatik dağıtımı tetikler. Render ortam değişkenlerinde `NEXT_PUBLIC_FIREBASE_*` değerleri ve (isteğe bağlı) `NEXT_PUBLIC_GIPHY_API_KEY` tanımlı olmalıdır.
 
-## Spark plan: local Cerebras AI Twin worker
+## Cerebras AI Twin (isteğe bağlı, lokal)
 
-Cloud Functions requires Blaze. To keep the project on Spark, use the local worker:
+AI Twin, çevrimdışı bahsedilen kullanıcı adına persona temsili yanıt üretir. Bulut tarafı gerekmediği için Spark planında kalınır; yerel bir Node worker ile çalışır.
 
 1. Firebase Console → Project settings → Service accounts → Generate new private key.
-2. Store the downloaded JSON outside the public web folder.
-3. Copy `worker/.env.example` to `worker/.env.local` and set the service-account path and Cerebras key.
-4. Install and run:
+2. İndirilen JSON'u web klasörü dışında sakla.
+3. `worker/.env.example` dosyasını `worker/.env.local` olarak kopyala; service-account yolunu ve Cerebras anahtarını gir.
+4. Kur ve çalıştır:
 
 ```bash
 npm install --prefix worker
 npm run twin:worker
 ```
 
-The worker keeps the Cerebras key off the browser. It must remain running for AI Twin replies to be generated.
+Worker, Cerebras anahtarını tarayıcıdan uzak tutar. AI Twin yanıtlarının üretilmesi için worker'ın çalışıyor olması gerekir.

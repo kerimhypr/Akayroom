@@ -684,23 +684,28 @@ export default function Home(){
 
   useEffect(()=>{
     if(!user) return;
-    return onValue(ref(db,"dmThreads"), async (snap)=>{
+    return onValue(ref(db,`users/${user.uid}/dmThreads`), async (snap)=>{
       if(!snap.exists()){ setDmThreads([]); return; }
-      const all = snap.val() as Record<string, any>;
+      const ids = Object.keys(snap.val() as Record<string, boolean>);
       const byOther = new Map<string, {id:string, otherUid:string, profile:UserProfile|null, lastAt:number}>();
-      for(const [id, val] of Object.entries(all)){
-        const participants = val.participants as Record<string, boolean>;
-        if(!participants || !participants[user!.uid]) continue;
-        const otherUid = Object.keys(participants).find(k=>k!==user!.uid);
-        if(!otherUid) continue;
-        const lastAt = (val as any).lastMessageAt || (val as any).createdAt || 0;
-        const existing = byOther.get(otherUid);
-        if(existing && existing.lastAt >= lastAt) continue;
+      await Promise.all(ids.map(async id=>{
         try{
-          const psnap = await get(ref(db,`users/${otherUid}/public`));
-          byOther.set(otherUid, {id, otherUid, profile: psnap.exists()? psnap.val(): null, lastAt});
-        }catch{ byOther.set(otherUid, {id, otherUid, profile:null, lastAt});}
-      }
+          const tsnap = await get(ref(db,`dmThreads/${id}`));
+          if(!tsnap.exists()) return;
+          const val = tsnap.val() as any;
+          const participants = val.participants as Record<string, boolean>;
+          if(!participants || !participants[user!.uid]) return;
+          const otherUid = Object.keys(participants).find(k=>k!==user!.uid);
+          if(!otherUid) return;
+          const lastAt = val.lastMessageAt || val.createdAt || 0;
+          const existing = byOther.get(otherUid);
+          if(existing && existing.lastAt >= lastAt) return;
+          try{
+            const psnap = await get(ref(db,`users/${otherUid}/public`));
+            byOther.set(otherUid, {id, otherUid, profile: psnap.exists()? psnap.val(): null, lastAt});
+          }catch{ byOther.set(otherUid, {id, otherUid, profile:null, lastAt}); }
+        }catch{}
+      }));
       const next = Array.from(byOther.values());
       next.sort((a,b)=>b.lastAt-a.lastAt);
       setDmThreads(next);
@@ -1319,7 +1324,7 @@ export default function Home(){
   }
 
   async function searchGifs(){
-    const key=process.env.NEXT_PUBLIC_GIPHY_API_KEY || "R8c1dYdCtzP7qoeRcFqk7hCjex1lNSYZ";
+    const key=process.env.NEXT_PUBLIC_GIPHY_API_KEY;
     if(!key || !gifSearch.trim()){ setGifResults([]); setToast("Giphy anahtarı yok"); return; }
     try{
       const res=await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(gifSearch)}&limit=6`);
@@ -1787,22 +1792,26 @@ export default function Home(){
 
   async function startDM(otherUid: string){
     if(!user || otherUid===user.uid) return;
-    // server-side check first (fresh)
+    // server-side check first (fresh) — kullanıcının kendi dmThreads index'inden
     try{
-      const snap = await get(ref(db,"dmThreads"));
-      if(snap.exists()){
-        const all = snap.val() as Record<string, any>;
+      const idx = await get(ref(db,`users/${user.uid}/dmThreads`));
+      if(idx.exists()){
+        const ids = Object.keys(idx.val() as Record<string, boolean>);
         let bestId: string|null = null;
         let bestAt = -1;
-        for(const [id, val] of Object.entries(all)){
-          const parts = (val as any).participants as Record<string, boolean>|undefined;
-          if(!parts || !parts[user.uid] || !parts[otherUid]) continue;
-          // ensure exactly these two participants (or at least both)
-          const keys = Object.keys(parts);
-          if(keys.length!==2) continue;
-          const at = (val as any).lastMessageAt || (val as any).createdAt || 0;
-          if(at > bestAt){ bestAt = at; bestId = id; }
-        }
+        await Promise.all(ids.map(async id=>{
+          try{
+            const tsnap = await get(ref(db,`dmThreads/${id}`));
+            if(!tsnap.exists()) return;
+            const val = tsnap.val() as any;
+            const parts = val.participants as Record<string, boolean>|undefined;
+            if(!parts || !parts[user.uid] || !parts[otherUid]) return;
+            const keys = Object.keys(parts);
+            if(keys.length!==2) return;
+            const at = val.lastMessageAt || val.createdAt || 0;
+            if(at > bestAt){ bestAt = at; bestId = id; }
+          }catch{}
+        }));
         if(bestId){
           setSelectedDm(bestId);
           (setActiveView as any)("dms" as any);
@@ -1828,11 +1837,15 @@ export default function Home(){
     // try deterministic first
     try{
       await set(detRef, {participants:{[user.uid]:true, [otherUid]:true}, createdAt: now, lastMessageAt: now});
+      await set(ref(db,`users/${user.uid}/dmThreads/${detId}`), true);
+      await set(ref(db,`users/${otherUid}/dmThreads/${detId}`), true);
       setSelectedDm(detId);
     }catch{
       // fallback to push if fails (e.g., already exists race)
       const threadRef = push(ref(db,"dmThreads"));
       await set(threadRef, {participants:{[user.uid]:true, [otherUid]:true}, createdAt: now, lastMessageAt: now});
+      await set(ref(db,`users/${user.uid}/dmThreads/${threadRef.key}`), true);
+      await set(ref(db,`users/${otherUid}/dmThreads/${threadRef.key}`), true);
       setSelectedDm(threadRef.key!);
     }
     (setActiveView as any)("dms" as any);
@@ -1965,6 +1978,9 @@ export default function Home(){
 
   function openThread(msg:ChatMessage){
     setThreadParent(msg); setShowThread(true);
+    if(msg.serverId && msg.channelId){
+      void set(ref(db,`threadMeta/${msg.id}`),{serverId:msg.serverId, channelId:msg.channelId}).catch(()=>{});
+    }
   }
 
   function sendThread(){
