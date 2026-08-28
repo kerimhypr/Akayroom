@@ -9,9 +9,7 @@ export default function MobileMenuBridge() {
     const closeFromNavigation = (event: Event) => {
       const target = event.target as Element | null;
       if (!target) return;
-      if (target.closest(".channel-row, .dm-item, .sidebar-back")) {
-        setOpen(false);
-      }
+      if (target.closest(".channel-row, .dm-item, .sidebar-back")) setOpen(false);
     };
     document.addEventListener("click", closeFromNavigation);
     return () => document.removeEventListener("click", closeFromNavigation);
@@ -24,14 +22,17 @@ export default function MobileMenuBridge() {
   }, [open]);
 
   return (
-    <button
-      type="button"
-      aria-label={open ? "Kanalları kapat" : "Kanalları aç"}
-      aria-expanded={open}
-      className="mobile-menu-bridge"
-      onClick={() => setOpen(value => !value)}
-    >
-      <span aria-hidden="true">☰</span>
-    </button>
+    <>
+      {open && <button type="button" aria-label="Kanalları kapat" className="mobile-menu-backdrop" onClick={() => setOpen(false)} />}
+      <button
+        type="button"
+        aria-label={open ? "Kanalları kapat" : "Kanalları aç"}
+        aria-expanded={open}
+        className="mobile-menu-bridge"
+        onClick={() => setOpen(value => !value)}
+      >
+        <span aria-hidden="true">☰</span>
+      </button>
+    </>
   );
 }
