@@ -1,58 +1,143 @@
-/* AKAYROOM mobile hardening */
+/* AKAYROOM mobile shell: rebuilt as a real single-screen mobile UI. */
 @media (max-width: 760px) {
-  html, body { width:100%; min-width:0; max-width:100%; overflow-x:hidden; overscroll-behavior-x:none; }
+  html, body { width:100%; min-width:0; max-width:100%; overflow:hidden; overscroll-behavior:none; }
   body { min-height:100dvh; }
-  .app-shell { width:100%; max-width:100vw; height:100dvh; min-height:100dvh; overflow:hidden; }
-  .server-rail { width:58px; min-width:58px; padding:10px 5px; gap:7px; }
-  .server-icon { width:44px; height:44px; min-width:44px; min-height:44px; }
-  .channel-sidebar { min-width:0; max-width:82vw; overflow-x:hidden; }
-  .channel-sidebar.mobile-open { inset:0 18% 0 58px; max-width:none; }
-  .main-content, .chat-area, .message-area, .messages, .content-area { min-width:0; max-width:100%; }
-  .message-area { overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; }
-  .message-row { min-width:0; max-width:100%; }
-  .message-content, .msg-content, .message-text { min-width:0; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
-  .message-content img, .message-content video, .msg-content img, .msg-content video { max-width:100%; height:auto; }
-  .composer-wrap { width:100%; max-width:100%; padding-left:8px; padding-right:8px; padding-bottom:max(8px, env(safe-area-inset-bottom)); }
-  .composer { width:100%; max-width:100%; min-width:0; gap:6px; }
-  .composer-main { min-width:0; flex:1 1 auto; }
-  .composer-input { min-width:0; width:100%; max-width:100%; font-size:16px; }
-  .composer-actions { flex:0 0 auto; gap:3px; }
-  .composer-actions button { min-width:36px; min-height:36px; }
-  .composer-plus, .send-button { min-width:40px; min-height:40px; }
-  .thread-composer { padding-bottom:max(8px, env(safe-area-inset-bottom)); }
-  .thread-composer input { min-width:0; flex:1 1 auto; }
-  .context-menu { max-width:calc(100vw - 16px); max-height:calc(100dvh - 16px); overflow:auto; }
-  .modal-backdrop { padding:max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)); overflow:auto; }
-  .modal { max-width:100%; }
-  .auth-screen { min-height:100dvh; padding:16px; padding-top:max(16px, env(safe-area-inset-top)); padding-bottom:max(16px, env(safe-area-inset-bottom)); }
-  .auth-card { width:100%; max-width:420px; padding-left:20px; padding-right:20px; }
-  .header-actions { min-width:0; overflow-x:auto; scrollbar-width:none; }
-  .header-actions::-webkit-scrollbar { display:none; }
-  .topbar, .channel-header { min-width:0; }
-  .topbar-title, .channel-title, .header-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .call-pip { max-width:calc(100vw - 24px); max-height:calc(100dvh - 24px); }
+
+  .app-shell {
+    position:relative !important;
+    display:block !important;
+    width:100vw !important;
+    max-width:100vw !important;
+    height:100dvh !important;
+    min-height:100dvh !important;
+    overflow:hidden !important;
+  }
+  .server-rail, .member-sidebar { display:none !important; }
+
+  .chat-panel {
+    position:relative !important;
+    display:flex !important;
+    flex-direction:column !important;
+    width:100vw !important;
+    max-width:100vw !important;
+    height:100dvh !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    overflow:hidden !important;
+  }
+
+  .chat-header {
+    flex:0 0 58px !important;
+    height:58px !important;
+    min-height:58px !important;
+    width:100% !important;
+    padding:0 9px !important;
+    gap:7px !important;
+    overflow:hidden !important;
+    position:relative !important;
+    z-index:20 !important;
+  }
+  .channel-heading { min-width:0 !important; overflow:hidden !important; gap:7px !important; }
+  .channel-heading strong { min-width:0 !important; max-width:48vw !important; overflow:hidden !important; text-overflow:ellipsis !important; white-space:nowrap !important; font-size:15px !important; }
+  .channel-heading .topic { display:none !important; }
+  .header-actions { margin-left:auto !important; min-width:0 !important; flex:0 0 auto !important; gap:4px !important; overflow:hidden !important; }
+  .header-search { display:none !important; }
+  .header-actions > button { width:36px !important; height:36px !important; min-width:36px !important; min-height:36px !important; padding:0 !important; }
+  .mobile-toggle { display:grid !important; place-items:center !important; width:40px !important; height:40px !important; min-width:40px !important; min-height:40px !important; flex:0 0 auto !important; }
+
+  .message-area {
+    flex:1 1 auto !important;
+    min-height:0 !important;
+    min-width:0 !important;
+    width:100% !important;
+    max-width:100% !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    -webkit-overflow-scrolling:touch !important;
+    overscroll-behavior-x:contain !important;
+    padding-bottom:env(safe-area-inset-bottom, 0px) !important;
+  }
+  .message-row { width:100% !important; max-width:100% !important; min-width:0 !important; padding:7px 10px 7px 50px !important; }
+  .message-row .msg-avatar { left:9px !important; width:34px !important; height:34px !important; }
+  .msg-body, .msg-content, .msg-author-row { min-width:0 !important; max-width:100% !important; overflow-wrap:anywhere !important; word-break:break-word !important; }
+  .msg-content img, .msg-content video, .github-card, .music-card, .poll { max-width:100% !important; height:auto; }
+  .msg-actions { opacity:1 !important; position:static !important; display:flex !important; flex-wrap:wrap !important; }
+  .msg-actions button { min-width:34px !important; min-height:34px !important; }
+
+  .typing-indicator { flex:0 0 auto !important; min-height:22px !important; padding:2px 9px !important; }
+  .composer-wrap {
+    position:relative !important;
+    flex:0 0 auto !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:6px 7px calc(7px + env(safe-area-inset-bottom, 0px)) !important;
+    background:var(--bg) !important;
+    z-index:15 !important;
+  }
+  .composer { width:100% !important; max-width:100% !important; min-width:0 !important; gap:5px !important; }
+  .composer-main { flex:1 1 auto !important; min-width:0 !important; }
+  .composer-input { width:100% !important; min-width:0 !important; max-width:100% !important; font-size:16px !important; }
+  .composer-actions { flex:0 0 auto !important; min-width:0 !important; gap:3px !important; }
+  .composer-actions > button { min-width:36px !important; height:38px !important; }
+  .composer-plus, .send-button { width:40px !important; min-width:40px !important; height:40px !important; }
+
+  /* Drawer. The existing mobile-toggle opens it and channel clicks close it. */
+  .channel-sidebar {
+    display:none !important;
+    position:fixed !important;
+    inset:0 auto 0 0 !important;
+    width:min(86vw, 340px) !important;
+    max-width:340px !important;
+    height:100dvh !important;
+    z-index:100 !important;
+    overflow:hidden !important;
+    box-shadow:var(--shadow-3) !important;
+  }
+  .channel-sidebar.mobile-open { display:flex !important; flex-direction:column !important; }
+  .channel-sidebar.mobile-open::after {
+    content:"";
+    position:fixed;
+    inset:0 0 0 min(86vw, 340px);
+    background:rgba(0,0,0,.58);
+    backdrop-filter:blur(3px);
+    z-index:-1;
+  }
+  .server-title { flex:0 0 58px !important; min-height:58px !important; padding:0 11px !important; }
+  .channel-search { flex:0 0 auto !important; padding:9px !important; }
+  .channel-search input { width:100% !important; height:42px !important; }
+  .channel-scroll { flex:1 1 auto !important; min-height:0 !important; overflow-y:auto !important; overflow-x:hidden !important; }
+  .channel-row, .dm-item { min-height:48px !important; }
+  .current-user { flex:0 0 auto !important; padding-bottom:calc(7px + env(safe-area-inset-bottom, 0px)) !important; }
+
+  .page-panel { min-width:0 !important; max-width:100% !important; overflow-x:hidden !important; padding:12px !important; }
+  .page-panel > * { min-width:0 !important; max-width:100% !important; }
+  .friend-row { min-width:0 !important; flex-wrap:wrap !important; gap:6px !important; }
+  .friend-row > div { min-width:0 !important; }
+  .hub-card { min-width:0 !important; }
+  .modal-backdrop { padding:10px !important; overflow:auto !important; }
+  .modal { max-width:calc(100vw - 20px) !important; }
 }
 
 @media (max-width: 420px) {
-  .app-shell { grid-template-columns:52px minmax(0,1fr); }
-  .server-rail { width:52px; min-width:52px; padding-left:4px; padding-right:4px; }
-  .server-icon { width:40px; height:40px; min-width:40px; min-height:40px; }
-  .channel-sidebar.mobile-open { inset:0 10% 0 52px; }
-  .message-row { padding-left:50px; padding-right:10px; }
-  .message-row .msg-avatar { left:8px; }
-  .group-time { left:5px; }
-  .composer-wrap { padding-left:5px; padding-right:5px; }
-  .composer-actions button:not(.send-button) { display:none; }
-  .composer-actions { gap:2px; }
+  .chat-header { padding:0 6px !important; }
+  .channel-heading strong { max-width:44vw !important; font-size:14px !important; }
+  .header-actions > button { width:34px !important; min-width:34px !important; height:34px !important; min-height:34px !important; }
+  .mobile-toggle { width:38px !important; min-width:38px !important; height:38px !important; min-height:38px !important; }
+  .message-row { padding-left:47px !important; padding-right:8px !important; }
+  .message-row .msg-avatar { left:7px !important; width:32px !important; height:32px !important; }
+  .composer { gap:4px !important; }
+  .composer-actions > button:not(.send-button) { display:none !important; }
+  .composer-plus, .send-button { width:38px !important; min-width:38px !important; height:38px !important; }
 }
 
-@supports (height: 100svh) {
+@supports (height:100svh) {
   @media (max-width:760px) {
-    .app-shell, .loading-screen, .auth-screen { min-height:100svh; }
+    .app-shell, .chat-panel { min-height:100svh !important; }
   }
 }
 
 @media (pointer:coarse) {
   button, [role="button"], .channel-row, .dm-item, .server-icon, .member-row { -webkit-tap-highlight-color:transparent; }
-  .channel-row, .dm-item, .member-row { min-height:44px; }
 }
