@@ -1,69 +1,134 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { signOut, type User } from "firebase/auth";
-import { onValue, push, ref, serverTimestamp, set } from "firebase/database";
+import { get, onValue, push, ref, remove, set, update } from "firebase/database";
 import { auth, db } from "@/lib/firebase";
-import type { Channel, ChatMessage, Server } from "@/lib/types";
+import { QUICK_REACTIONS, fallbackCats, fallbackChannels } from "@/lib/constants";
+import { attachmentKind, compressImage, fileToDataUrl, fmtSize, fmtTime, initials } from "@/lib/format";
+import { uploadAttachment, storageDownloadUrl, attachmentStoragePath } from "@/lib/storage";
+import { searchGifs } from "@/lib/api";
+import type { Category, Channel, ChatMessage, DMMessage, DMThread, MessageAttachmentMeta, Server, UserProfile } from "@/lib/types";
 
-const fallback: Channel[] = [
-  { id: "general", name: "general", type: "text", position: 0, topic: "Genel sohbet" },
-  { id: "lobby", name: "lobby", type: "text", position: 1, topic: "Takılma alanı" },
-  { id: "voice", name: "voice", type: "voice", position: 2 },
-];
-
-const initials = (s: string) => s.trim().split(/\s+/).map(x => x[0]).join("").slice(0, 2).toUpperCase() || "U";
-const time = (n: number) => new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" }).format(n || Date.now());
+const safeTime = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : Date.now();
+const parseObj = <T,>(value: unknown): Record<string, T> => value && typeof value === "object" ? value as Record<string, T> : {};
+const sortByPosition = (a: {position?: number}, b: {position?: number}) => (a.position ?? 0) - (b.position ?? 0);
 
 export default function Workspace({ user }: { user: User }) {
-  const [servers, setServers] = useState<Server[]>([]), [serverId, setServerId] = useState("");
-  const [channels, setChannels] = useState<Channel[]>(fallback), [channelId, setChannelId] = useState("general");
-  const [messages, setMessages] = useState<ChatMessage[]>([]), [draft, setDraft] = useState("");
-  const [navOpen, setNavOpen] = useState(false), [members, setMembers] = useState(false), [error, setError] = useState("");
-  const name = user.displayName || user.email?.split("@")[0] || "User";
+  const [profile,setProfile]=useState<UserProfile|null>(null);
+  const [servers,setServers]=useState<Server[]>([]), [serverId,setServerId]=useState<string>("");
+  const [channels,setChannels]=useState<Channel[]>(fallbackChannels), [channelId,setChannelId]=useState("general");
+  const [categories,setCategories]=useState<Category[]>(fallbackCats);
+  const [messages,setMessages]=useState<ChatMessage[]>([]);
+  const [members,setMembers]=useState<{uid:string,profile:UserProfile|null,role:string}[]>([]);
+  const [draft,setDraft]=useState(""), [search,setSearch]=useState(""), [replyTo,setReplyTo]=useState<ChatMessage|null>(null);
+  const [editingId,setEditingId]=useState<string|null>(null), [editText,setEditText]=useState("");
+  const [navOpen,setNavOpen]=useState(false), [memberPanel,setMemberPanel]=useState(false);
+  const [friendsMode,setFriendsMode]=useState(false), [dmsMode,setDmsMode]=useState(false), [profileMode,setProfileMode]=useState(false);
+  const [dmThreads,setDmThreads]=useState<(DMThread & {otherUid:string,profile:UserProfile|null})[]>([]), [selectedDm,setSelectedDm]=useState<string|null>(null), [dmMessages,setDmMessages]=useState<DMMessage[]>([]), [dmDraft,setDmDraft]=useState("");
+  const [friends,setFriends]=useState<string[]>([]), [friendRequests,setFriendRequests]=useState<Record<string,{fromName?:string,createdAt:number}>>({}), [friendName,setFriendName]=useState("");
+  const [pendingFile,setPendingFile]=useState<File|null>(null), [sending,setSending]=useState(false), [toast,setToast]=useState("");
+  const [gifOpen,setGifOpen]=useState(false), [gifQuery,setGifQuery]=useState(""), [gifResults,setGifResults]=useState<string[]>([]);
+  const [pollOpen,setPollOpen]=useState(false), [pollQuestion,setPollQuestion]=useState(""), [pollOptions,setPollOptions]=useState(["",""]);
+  const [createServerOpen,setCreateServerOpen]=useState(false), [serverName,setServerName]=useState("");
+  const [createChannelOpen,setCreateChannelOpen]=useState(false), [newChannelName,setNewChannelName]=useState(""), [settingsOpen,setSettingsOpen]=useState(false);
+  const [voiceState,setVoiceState]=useState<"idle"|"joining"|"joined">("idle"), localAudioRef=useRef<MediaStream|null>(null);
+  const listRef=useRef<HTMLDivElement>(null), fileRef=useRef<HTMLInputElement>(null);
 
-  useEffect(() => onValue(ref(db, `users/${user.uid}/servers`), snap => {
-    const ids = Object.keys(snap.val() || {});
-    if (!ids.length) { setServers([]); setServerId(""); return; }
-    return onValue(ref(db, "servers"), allSnap => {
-      const all = allSnap.val() || {};
-      const next = ids.map(id => all[id] ? { ...all[id], id } : null).filter(Boolean) as Server[];
-      setServers(next); setServerId(x => next.some(s => s.id === x) ? x : next[0]?.id || "");
+  useEffect(()=>onValue(ref(db,`users/${user.uid}/public`),s=>setProfile(s.val() as UserProfile|null)),[user.uid]);
+
+  useEffect(()=>{
+    const stop=onValue(ref(db,`users/${user.uid}/servers`),snap=>{
+      const ids=Object.keys(parseObj<boolean>(snap.val()));
+      Promise.all(ids.map(async id=>{const s=await get(ref(db,`servers/${id}`)); return s.exists()?({...s.val(),id} as Server):null;})).then(next=>{
+        const clean=next.filter(Boolean) as Server[]; setServers(clean); setServerId(cur=>clean.some(s=>s.id===cur)?cur:(clean[0]?.id||""));
+      });
+    }); return stop;
+  },[user.uid]);
+
+  useEffect(()=>{
+    if(!serverId){setChannels(fallbackChannels);setCategories(fallbackCats);return;}
+    const un1=onValue(ref(db,`channels/${serverId}`),snap=>{const next=Object.entries(parseObj<Channel>(snap.val())).map(([id,v])=>({...v,id})).sort(sortByPosition);setChannels(next.length?next:fallbackChannels);setChannelId(cur=>next.some(c=>c.id===cur)?cur:(next.find(c=>c.type!=="voice")?.id||"general"));});
+    const un2=onValue(ref(db,`categories/${serverId}`),snap=>{const next=Object.entries(parseObj<Category>(snap.val())).map(([id,v])=>({...v,id})).sort(sortByPosition);setCategories(next);});
+    return ()=>{un1();un2();};
+  },[serverId]);
+
+  useEffect(()=>{
+    if(!serverId||!channelId||dmsMode){setMessages([]);return;}
+    return onValue(ref(db,`messages/${serverId}/${channelId}`),snap=>{
+      const next=Object.entries(parseObj<ChatMessage>(snap.val())).map(([id,v])=>({...v,id,createdAt:safeTime(v.createdAt)})).sort((a,b)=>a.createdAt-b.createdAt).slice(-200); setMessages(next);
     });
-  }), [user.uid]);
+  },[serverId,channelId,dmsMode]);
 
-  useEffect(() => {
-    if (!serverId) { setChannels(fallback); setChannelId("general"); return; }
-    return onValue(ref(db, `channels/${serverId}`), snap => {
-      const raw = snap.val() || {};
-      const next = Object.entries(raw).map(([id, value]) => ({ ...(value as Channel), id })).sort((a, b) => a.position - b.position);
-      setChannels(next.length ? next : fallback); setChannelId(x => next.some(c => c.id === x) ? x : next.find(c => c.type === "text")?.id || "general");
+  useEffect(()=>{
+    if(!serverId){setMembers([]);return;}
+    return onValue(ref(db,`serverMembers/${serverId}`),snap=>{
+      const entries=Object.entries(parseObj<{role:string}>(snap.val()));
+      Promise.all(entries.map(async ([uid,v])=>{const p=await get(ref(db,`users/${uid}/public`)); return {uid,role:v.role||"member",profile:p.exists()?(p.val() as UserProfile):null};})).then(setMembers);
     });
-  }, [serverId]);
+  },[serverId]);
 
-  useEffect(() => {
-    if (!serverId || !channelId) { setMessages([]); return; }
-    return onValue(ref(db, `messages/${serverId}/${channelId}`), snap => {
-      const raw = snap.val() || {};
-      setMessages(Object.entries(raw).map(([id, value]) => ({ ...(value as ChatMessage), id })).sort((a, b) => a.createdAt - b.createdAt).slice(-100));
+  useEffect(()=>{
+    return onValue(ref(db,`users/${user.uid}/friends`),snap=>setFriends(Object.keys(parseObj<boolean>(snap.val())).filter(Boolean)));
+  },[user.uid]);
+  useEffect(()=>onValue(ref(db,`friendRequests/${user.uid}/incoming`),snap=>setFriendRequests(parseObj(snap.val()))),[user.uid]);
+
+  useEffect(()=>{
+    if(!dmsMode){setDmThreads([]);setSelectedDm(null);return;}
+    return onValue(ref(db,`users/${user.uid}/dmThreads`),snap=>{
+      const ids=Object.keys(parseObj<boolean>(snap.val()));
+      Promise.all(ids.map(async id=>{const t=await get(ref(db,`dmThreads/${id}`));if(!t.exists())return null;const thread=t.val() as DMThread;const other=Object.keys(thread.participants||{}).find(x=>x!==user.uid)||user.uid;const p=await get(ref(db,`users/${other}/public`));return {...thread,id,otherUid:other,profile:p.exists()?(p.val() as UserProfile):null};})).then(v=>setDmThreads(v.filter(Boolean) as any[]));
     });
-  }, [serverId, channelId]);
+  },[dmsMode,user.uid]);
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault(); const content = draft.trim(); if (!content || !serverId) return;
-    setDraft(""); setError("");
-    try { const r = push(ref(db, `messages/${serverId}/${channelId}`)); await set(r, { serverId, channelId, authorId: user.uid, authorName: name, content, createdAt: serverTimestamp() }); }
-    catch { setDraft(content); setError("Mesaj gönderilemedi."); }
-  }
+  useEffect(()=>{
+    if(!selectedDm){setDmMessages([]);return;}
+    return onValue(ref(db,`dmMessages/${selectedDm}`),snap=>{const next=Object.entries(parseObj<DMMessage>(snap.val())).map(([id,v])=>({...v,id,createdAt:safeTime(v.createdAt)})).sort((a,b)=>a.createdAt-b.createdAt).slice(-200);setDmMessages(next);});
+  },[selectedDm]);
 
-  const active = channels.find(c => c.id === channelId) || channels[0];
-  const server = servers.find(s => s.id === serverId);
+  useEffect(()=>{if(listRef.current) listRef.current.scrollTop=listRef.current.scrollHeight;},[messages,dmMessages]);
+  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(""),2200);return()=>clearTimeout(t);},[toast]);
 
-  return <main className="v15-workspace">
-    <aside className={`v15-servers ${navOpen ? "is-open" : ""}`}><div className="v15-brand">A</div>{servers.map(s => <button key={s.id} className={`v15-server ${s.id === serverId ? "active" : ""}`} onClick={() => { setServerId(s.id); setNavOpen(false); }}>{initials(s.name)}</button>)}<button className="v15-server-add">+</button></aside>
-    <aside className={`v15-nav ${navOpen ? "is-open" : ""}`}><div className="v15-nav-head"><div><span>WORKSPACE</span><strong>{server?.name || "AkayRoom"}</strong></div><button onClick={() => setNavOpen(false)}>×</button></div><div className="v15-nav-scroll"><div className="v15-nav-label">CHANNELS</div>{channels.map(c => <button key={c.id} className={`v15-channel ${c.id === channelId ? "active" : ""}`} onClick={() => { setChannelId(c.id); setNavOpen(false); }}><b>{c.type === "voice" ? "◉" : "#"}</b>{c.name}</button>)}<div className="v15-nav-label v15-dm">DIRECT MESSAGES</div><div className="v15-empty">No conversations yet.</div></div><div className="v15-account"><div className="v15-avatar">{initials(name)}</div><div><strong>{name}</strong><span>Online</span></div><button onClick={() => void signOut(auth)}>↗</button></div></aside>
-    {navOpen && <button className="v15-backdrop" onClick={() => setNavOpen(false)} aria-label="Close navigation" />}
-    <section className="v15-chat"><header className="v15-header"><button className="v15-menu" onClick={() => setNavOpen(true)}>☰</button><div className="v15-title"><span>#</span><div><strong>{active?.name || "general"}</strong>{active?.topic && <small>{active.topic}</small>}</div></div><div className="v15-actions"><button onClick={() => setMembers(x => !x)}>{members ? "Hide" : "Members"}</button><button>⌕</button></div></header><div className="v15-messages"><div className="v15-intro"><div>#</div><h2>Welcome to #{active?.name || "general"}</h2><p>This is the beginning of the conversation.</p></div>{messages.map(m => <article className="v15-message" key={m.id}><div className="v15-avatar">{initials(m.authorName || "U")}</div><div><div className="v15-meta"><strong>{m.authorName || "User"}</strong><time>{time(m.createdAt)}</time></div><p>{m.content}</p></div></article>)}{error && <div className="v15-send-error">{error}</div>}</div><form className="v15-composer" onSubmit={send}><button type="button">+</button><input value={draft} onChange={e => setDraft(e.target.value)} placeholder={`Message #${active?.name || "general"}`} disabled={!serverId} /><button disabled={!draft.trim() || !serverId}>↑</button></form></section>
-    {members && <aside className="v15-members"><span>MEMBERS</span><div className="v15-member"><div className="v15-avatar">{initials(name)}</div><div><strong>{name}</strong><small>Online</small></div></div></aside>}
-  </main>;
+  const currentServer=servers.find(s=>s.id===serverId); const currentChannel=channels.find(c=>c.id===channelId)||channels[0]; const myRole=members.find(m=>m.uid===user.uid)?.role||"member"; const canManage=myRole==="owner"||myRole==="admin";
+  const visibleMessages=useMemo(()=>search.trim()?messages.filter(m=>`${m.authorName||""} ${m.content}`.toLowerCase().includes(search.toLowerCase())):messages,[messages,search]);
+  const displayName=profile?.displayName||user.displayName||user.email?.split("@")[0]||"User";
+
+  async function sendMessage(e?:React.FormEvent){e?.preventDefault();const text=draft.trim();if(!text||!serverId||currentChannel?.type==="voice")return;setDraft("");try{let payload:Record<string,unknown>={serverId,channelId,authorId:user.uid,authorName:displayName,content:text,createdAt:Date.now()};if(replyTo)payload.replyTo={id:replyTo.id,authorName:replyTo.authorName,content:replyTo.content.slice(0,180)};const r=push(ref(db,`messages/${serverId}/${channelId}`));await set(r,payload);setReplyTo(null);}catch{setDraft(text);setToast("Mesaj gönderilemedi");}}
+  async function editMessage(id:string){const text=editText.trim();if(!text)return;await update(ref(db,`messages/${serverId}/${channelId}/${id}`),{content:text,editedAt:Date.now()});setEditingId(null);}
+  async function deleteMessage(id:string){await remove(ref(db,`messages/${serverId}/${channelId}/${id}`));}
+  async function react(id:string,emoji:string){const r=ref(db,`reactions/${serverId}/${channelId}/${id}/${emoji}/${user.uid}`);const s=await get(r);if(s.exists())await remove(r);else await set(r,true);}
+  async function createServer(){const n=serverName.trim();if(!n)return;setSending(true);try{const r=push(ref(db,"servers"));const id=r.key!;const now=Date.now();await set(r,{name:n,ownerId:user.uid,createdAt:now});await set(ref(db,`serverMembers/${id}/${user.uid}`),{role:"owner",joinedAt:now});await set(ref(db,`users/${user.uid}/servers/${id}`),true);const c=push(ref(db,`channels/${id}`));await set(c,{name:"genel",type:"text",position:0,topic:"Genel sohbet"});const v=push(ref(db,`channels/${id}`));await set(v,{name:"sesli",type:"voice",position:1});setServerId(id);setCreateServerOpen(false);setServerName("");}catch{setToast("Sunucu oluşturulamadı")}finally{setSending(false)}}
+  async function createChannel(){const n=newChannelName.trim();if(!n||!serverId||!canManage)return;const r=push(ref(db,`channels/${serverId}`));await set(r,{name:n,type:"text",position:channels.length,topic:""});setNewChannelName("");setCreateChannelOpen(false)}
+  async function searchGif(){const q=gifQuery.trim();if(!q)return;setGifResults(await searchGifs(q));}
+  async function postPoll(){if(!pollQuestion.trim()||!serverId)return;const options=pollOptions.map((x,i)=>({id:`o${i+1}`,text:x.trim(),votes:0})).filter(x=>x.text);if(options.length<2)return;const r=push(ref(db,`polls/${serverId}/${channelId}`));const pollId=r.key!;await set(r,{id:pollId,question:pollQuestion.trim(),options,totalVotes:0,createdBy:user.uid});await sendSpecial(`__POLL__${pollId}`,{poll:{id:pollId,question:pollQuestion.trim(),options,totalVotes:0}});setPollQuestion("");setPollOptions(["",""]);setPollOpen(false)}
+  async function sendSpecial(text:string,extra:Record<string,unknown>={}){const r=push(ref(db,`messages/${serverId}/${channelId}`));await set(r,{serverId,channelId,authorId:user.uid,authorName:displayName,content:text,createdAt:Date.now(),...extra});}
+  async function vote(pollId:string,optionId:string){await set(ref(db,`pollVotes/${pollId}/${user.uid}`),optionId)}
+  async function sendDM(e?:React.FormEvent){e?.preventDefault();const text=dmDraft.trim();if(!text||!selectedDm)return;setDmDraft("");const r=push(ref(db,`dmMessages/${selectedDm}`));await set(r,{authorId:user.uid,content:text,createdAt:Date.now()})}
+  async function startDM(uid:string){const existing=dmThreads.find(t=>t.otherUid===uid);if(existing){setDmsMode(true);setSelectedDm(existing.id);return;}const r=push(ref(db,"dmThreads"));const id=r.key!;const now=Date.now();const participants={[user.uid]:true,[uid]:true};await set(r,{participants,createdAt:now});await set(ref(db,`users/${user.uid}/dmThreads/${id}`),true);await set(ref(db,`users/${uid}/dmThreads/${id}`),true);setDmsMode(true);setSelectedDm(id)}
+  async function addFriend(){const q=friendName.trim().toLowerCase();if(!q)return;const idx=await get(ref(db,`usernameIndex/${q}`));if(!idx.exists()){setToast("Kullanıcı bulunamadı");return;}const uid=String(idx.val());if(uid===user.uid){setToast("Kendini ekleyemezsin");return;}await set(ref(db,`friendRequests/${uid}/incoming/${user.uid}`),{fromName:displayName,createdAt:Date.now()});await set(ref(db,`friendRequests/${user.uid}/outgoing/${uid}`),Date.now());setFriendName("");setToast("İstek gönderildi")}
+  async function acceptFriend(uid:string){await set(ref(db,`friends/${user.uid}/${uid}`),true);await set(ref(db,`friends/${uid}/${user.uid}`),true);await remove(ref(db,`friendRequests/${user.uid}/incoming/${uid}`));await remove(ref(db,`friendRequests/${uid}/outgoing/${user.uid}`));}
+  async function uploadFile(file:File){if(!serverId)return;setSending(true);try{const id=push(ref(db,`messages/${serverId}/${channelId}`)).key!;const data=await (file.type.startsWith("image/")?fileToDataUrl(await compressImage(file)):fileToDataUrl(file));const path=attachmentStoragePath(serverId,channelId,id,file.name);const token=await uploadAttachment(path,data,file.type||"application/octet-stream");const attachment:MessageAttachmentMeta={type:attachmentKind(file),name:file.name,size:file.size,storagePath:path,storageToken:token};await set(ref(db,`messages/${serverId}/${channelId}/${id}`),{serverId,channelId,authorId:user.uid,authorName:displayName,content:"",createdAt:Date.now(),attachment});}catch{setToast("Dosya yüklenemedi")}finally{setSending(false);setPendingFile(null)}}
+  async function joinVoice(){if(voiceState!=="idle")return;try{setVoiceState("joining");localAudioRef.current=await navigator.mediaDevices.getUserMedia({audio:true});setVoiceState("joined");}catch{setToast("Mikrofon izni gerekli");setVoiceState("idle")}}
+  function leaveVoice(){localAudioRef.current?.getTracks().forEach(t=>t.stop());localAudioRef.current=null;setVoiceState("idle")}
+  useEffect(()=>()=>leaveVoice(),[]);
+
+  const reactionsFor=useMemo(()=>{const out:Record<string,Record<string,number>>={};if(!serverId)return out;return out;},[serverId]);
+
+  if(friendsMode){return <main className="v15-shell"><SideNav {...{servers,serverId,setServerId,channels,channelId,setChannelId,navOpen,setNavOpen,currentServer,displayName,profile,setFriendsMode,setDmsMode,setProfileMode}}/><section className="v15-main"><Topbar title="Arkadaşlar" onMenu={()=>setNavOpen(true)}/><div className="v15-page"><section className="v15-card"><h1>Arkadaşlar</h1><div className="v15-inline"><input value={friendName} onChange={e=>setFriendName(e.target.value)} placeholder="kullanıcı adı"/><button onClick={addFriend}>İstek gönder</button></div></section>{Object.entries(friendRequests).length>0&&<section className="v15-card"><h2>Gelen istekler</h2>{Object.entries(friendRequests).map(([uid,r])=><div className="v15-list-row" key={uid}><span>{r.fromName||uid.slice(0,8)}</span><button onClick={()=>void acceptFriend(uid)}>Kabul et</button></div>)}</section>}<section className="v15-card"><h2>Arkadaş listesi</h2>{friends.length?friends.map(uid=><div className="v15-list-row" key={uid}><span>{uid.slice(0,10)}</span><button onClick={()=>void startDM(uid)}>Mesaj</button></div>):<p className="muted">Henüz arkadaşın yok.</p>}</section></div></section></main>}
+  if(dmsMode){const t=dmThreads.find(x=>x.id===selectedDm);return <main className="v15-shell"><SideNav {...{servers,serverId,setServerId,channels,channelId,setChannelId,navOpen,setNavOpen,currentServer,displayName,profile,setFriendsMode,setDmsMode,setProfileMode}}/><section className="v15-main"><Topbar title={t?.profile?.displayName||"Direkt mesaj"} onMenu={()=>setNavOpen(true)} right={<button className="v15-ghost" onClick={()=>setDmsMode(false)}>Sunucuya dön</button>}/><div className="v15-chat-body" ref={listRef}>{dmMessages.map(m=><MessageBubble key={m.id} message={{...m,serverId:"",channelId:""} as ChatMessage} mine={m.authorId===user.uid} onReply={()=>{}} onEdit={()=>{}} onDelete={()=>{}} onReact={()=>{}}/>)}</div><form className="v15-composer" onSubmit={sendDM}><button type="button">＋</button><input value={dmDraft} onChange={e=>setDmDraft(e.target.value)} placeholder="Mesaj yaz…"/><button disabled={!dmDraft.trim()}>➤</button></form></section></main>}
+  if(profileMode){return <main className="v15-shell"><SideNav {...{servers,serverId,setServerId,channels,channelId,setChannelId,navOpen,setNavOpen,currentServer,displayName,profile,setFriendsMode,setDmsMode,setProfileMode}}/><section className="v15-main"><Topbar title="Profil" onMenu={()=>setNavOpen(true)}/><div className="v15-page"><section className="v15-profile"><div className="v15-banner" style={{backgroundImage:profile?.bannerUrl?`url(${profile.bannerUrl})`:undefined,backgroundColor:profile?.bannerColor||"#161a26"}}/><div className="v15-profile-head"><div className="v15-big-avatar">{profile?.avatarUrl?<img src={profile.avatarUrl} alt=""/>:initials(displayName)}</div><div><h1>{displayName}</h1><p>@{profile?.username||"user"}</p><div className="v15-pills">{profile?.title&&<span>{profile.title}</span>}{profile?.pronouns&&<span>{profile.pronouns}</span>}</div></div></div>{profile?.customStatus&&<div className="v15-status">{profile.customStatusEmoji} {profile.customStatus}</div>}{profile?.bio&&<p className="v15-bio">{profile.bio}</p>}</section><button className="v15-primary" onClick={()=>setSettingsOpen(true)}>Profil ayarları</button></div></section>{settingsOpen&&<ProfileModal profile={profile} user={user} onClose={()=>setSettingsOpen(false)} onSaved={p=>setProfile(p)}/>}</main>}
+
+  return <main className="v15-shell"><SideNav {...{servers,serverId,setServerId,channels,channelId,setChannelId,navOpen,setNavOpen,currentServer,displayName,profile,setFriendsMode,setDmsMode,setProfileMode,canManage,createServerOpen,setCreateServerOpen}}/><section className="v15-main"><Topbar title={currentChannel?.name||"genel"} subtitle={currentChannel?.topic} onMenu={()=>setNavOpen(true)} right={<><button className="v15-icon-button" onClick={()=>setMemberPanel(x=>!x)}>☷</button><button className="v15-icon-button" onClick={()=>setSettingsOpen(true)}>⚙</button></>}/><div className="v15-chat-body" ref={listRef}><div className="v15-channel-intro"><span>#</span><h1>#{currentChannel?.name||"genel"}</h1><p>{currentChannel?.topic||"Bu kanalın başlangıcı."}</p></div>{visibleMessages.map((m,i)=><MessageBubble key={m.id} message={m} mine={m.authorId===user.uid} editing={editingId===m.id} editText={editText} onEditText={setEditText} onSaveEdit={()=>void editMessage(m.id)} onCancelEdit={()=>setEditingId(null)} onReply={()=>setReplyTo(m)} onEdit={()=>{setEditingId(m.id);setEditText(m.content)}} onDelete={()=>void deleteMessage(m.id)} onReact={(emoji)=>void react(m.id,emoji)}/>)}</div>{memberPanel&&<MemberPanel members={members}/>} {replyTo&&<div className="v15-reply-bar"><span><b>{replyTo.authorName}</b> yanıtlanıyor</span><button onClick={()=>setReplyTo(null)}>×</button></div>}<form className="v15-composer" onSubmit={sendMessage}><button type="button" onClick={()=>fileRef.current?.click()} disabled={sending}>＋</button><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder={currentChannel?.type==="voice"?"Ses kanalına katıl":"Mesaj yaz…"} onFocus={()=>{if(currentChannel?.type==="voice")void joinVoice()}}/><button type="button" onClick={()=>setGifOpen(x=>!x)}>GIF</button><button type="button" onClick={()=>setPollOpen(x=>!x)}>POLL</button><button type="submit" disabled={!draft.trim()||sending}>➤</button><input ref={fileRef} hidden type="file" accept="image/*,video/*,audio/*,.pdf,.zip,.txt,.doc,.docx" onChange={e=>{const f=e.target.files?.[0];if(f)void uploadFile(f);e.currentTarget.value=""}}/></form>{gifOpen&&<div className="v15-float-panel"><div className="v15-inline"><input value={gifQuery} onChange={e=>setGifQuery(e.target.value)} placeholder="GIF ara"/><button onClick={()=>void searchGif()}>Ara</button></div><div className="v15-gif-grid">{gifResults.map(url=><button key={url} onClick={()=>{void sendSpecial(url);setGifOpen(false)}}><img src={url} alt="GIF"/></button>)}</div></div>}{pollOpen&&<div className="v15-float-panel"><input value={pollQuestion} onChange={e=>setPollQuestion(e.target.value)} placeholder="Soru"/>{pollOptions.map((o,i)=><input key={i} value={o} onChange={e=>setPollOptions(v=>v.map((x,j)=>j===i?e.target.value:x))} placeholder={`Seçenek ${i+1}`}/>)}<button onClick={()=>setPollOptions(v=>[...v,""])}>＋ seçenek</button><button className="v15-primary" onClick={()=>void postPoll()}>Anket oluştur</button></div>}{toast&&<div className="v15-toast">{toast}</div>}{settingsOpen&&<SettingsModal profile={profile} user={user} onClose={()=>setSettingsOpen(false)} onSaved={p=>setProfile(p)}/>}</section></main>
 }
+
+function Topbar({title,subtitle,onMenu,right}:{title:string,subtitle?:string,onMenu:()=>void,right?:React.ReactNode}){return <header className="v15-topbar"><button className="v15-menu" onClick={onMenu}>☰</button><div className="v15-top-title"><b>{title}</b>{subtitle&&<span>{subtitle}</span>}</div><div className="v15-top-actions">{right}</div></header>}
+
+function SideNav({servers,serverId,setServerId,channels,channelId,setChannelId,navOpen,setNavOpen,currentServer,displayName,profile,setFriendsMode,setDmsMode,setProfileMode,canManage,createServerOpen,setCreateServerOpen}:{servers:Server[],serverId:string,setServerId:(x:string)=>void,channels:Channel[],channelId:string,setChannelId:(x:string)=>void,navOpen:boolean,setNavOpen:(x:boolean)=>void,currentServer?:Server,displayName:string,profile:UserProfile|null,setFriendsMode:(x:boolean)=>void,setDmsMode:(x:boolean)=>void,setProfileMode:(x:boolean)=>void,canManage?:boolean,createServerOpen?:boolean,setCreateServerOpen?:(x:boolean)=>void}){return <><aside className={`v15-sidebar ${navOpen?"open":""}`}><div className="v15-side-brand"><span className="v15-logo">A</span><div><b>AKAYROOM</b><small>v1.5</small></div><button className="v15-close-mobile" onClick={()=>setNavOpen(false)}>×</button></div><div className="v15-server-list"><button className="v15-server-chip home" onClick={()=>{setFriendsMode(false);setDmsMode(false)}}>⌂</button>{servers.map(s=><button className={`v15-server-chip ${s.id===serverId?"active":""}`} key={s.id} onClick={()=>{setServerId(s.id);setFriendsMode(false);setDmsMode(false);setProfileMode(false);setNavOpen(false)}}>{s.iconUrl?<img src={s.iconUrl} alt=""/>:initials(s.name)}</button>)}<button className="v15-server-chip add" onClick={()=>setCreateServerOpen?.(true)}>＋</button></div><div className="v15-nav-main"><div className="v15-server-heading"><div><span>SERVER</span><b>{currentServer?.name||"AkayRoom"}</b></div></div><button className="v15-nav-action" onClick={()=>setFriendsMode(true)}>◉ Arkadaşlar</button><button className="v15-nav-action" onClick={()=>setDmsMode(true)}>✉ Mesajlar</button><div className="v15-nav-label">KANALLAR</div>{channels.map(c=><button key={c.id} className={`v15-channel-row ${c.id===channelId&&!setDmsMode?"active":""}`} onClick={()=>{setChannelId(c.id);setDmsMode(false);setFriendsMode(false);setProfileMode(false);setNavOpen(false)}}><span>{c.type==="voice"?"◉":"#"}</span>{c.name}</button>)}{canManage&&<button className="v15-nav-action small">＋ Kanal ekle</button>}</div><button className="v15-account" onClick={()=>{setProfileMode(true);setFriendsMode(false);setDmsMode(false);setNavOpen(false)}}><div className="v15-avatar">{profile?.avatarUrl?<img src={profile.avatarUrl} alt=""/>:initials(displayName)}</div><div><b>{displayName}</b><span>online</span></div><span className="v15-more">⋯</span></button></aside>{navOpen&&<button className="v15-backdrop" onClick={()=>setNavOpen(false)} aria-label="Kapat"/>}{createServerOpen&&<CreateServerModal/>}</>}
+
+function MessageBubble({message,mine,editing=false,editText="",onEditText=()=>{},onSaveEdit=()=>{},onCancelEdit=()=>{},onReply=()=>{},onEdit=()=>{},onDelete=()=>{},onReact=()=>{}}:{message:ChatMessage,mine:boolean,editing?:boolean,editText?:string,onEditText?:(x:string)=>void,onSaveEdit?:()=>void,onCancelEdit?:()=>void,onReply:()=>void,onEdit:()=>void,onDelete:()=>void,onReact:(emoji:string)=>void}){const [open,setOpen]=useState(false);return <article className={`v15-message ${mine?"mine":""}`}><div className="v15-avatar msg">{initials(message.authorName||"User")}</div><div className="v15-msg-main"><div className="v15-meta"><b>{message.authorName||"User"}</b><time>{fmtTime(message.createdAt)}</time>{message.editedAt&&<em>(düzenlendi)</em>}</div>{message.replyTo&&<div className="v15-quoted">↳ {message.replyTo.authorName}: {message.replyTo.content}</div>}{editing?<div className="v15-edit"><input value={editText} onChange={e=>onEditText(e.target.value)} autoFocus/><button onClick={onSaveEdit}>Kaydet</button><button onClick={onCancelEdit}>İptal</button></div>:message.content.startsWith("https://")&&message.content.includes("media")?<img className="v15-gif" src={message.content} alt="GIF"/>:<p>{message.content||""}</p>}{message.attachment&&<AttachmentView attachment={message.attachment}/>} {message.poll&&<PollView poll={message.poll}/>}<div className={`v15-msg-actions ${open?"show":""}`}><button onClick={onReply}>↩</button>{QUICK_REACTIONS.map(e=><button key={e} onClick={()=>onReact(e)}>{e}</button>)}{mine&&<><button onClick={onEdit}>✎</button><button onClick={onDelete}>⌫</button></>}<button onClick={()=>setOpen(!open)}>⋯</button></div></div></article>}
+function AttachmentView({attachment}:{attachment:MessageAttachmentMeta}){const [src,setSrc]=useState("");useEffect(()=>{if(attachment.storagePath&&attachment.storageToken)setSrc(storageDownloadUrl(attachment.storagePath,attachment.storageToken));},[attachment]);if(!src)return <div className="v15-attachment">{attachment.name} · {fmtSize(attachment.size)}</div>;if(attachment.type==="image")return <img className="v15-attachment-image" src={src} alt={attachment.name}/>;if(attachment.type==="video")return <video className="v15-attachment-media" src={src} controls/>;if(attachment.type==="audio")return <audio className="v15-attachment-audio" src={src} controls/>;return <a className="v15-file" href={src} download={attachment.name}>{attachment.name} · {fmtSize(attachment.size)}</a>}
+function PollView({poll}:{poll:any}){return <div className="v15-poll"><b>{poll.question}</b>{(poll.options||[]).map((o:any)=><button key={o.id}>{o.text}<span>{o.votes||0}</span></button>)}</div>}
+function MemberPanel({members}:{members:{uid:string,profile:UserProfile|null,role:string}[]}){return <aside className="v15-members"><span>ÜYELER · {members.length}</span>{members.map(m=><div className="v15-member" key={m.uid}><div className="v15-avatar">{m.profile?.avatarUrl?<img src={m.profile.avatarUrl} alt=""/>:initials(m.profile?.displayName||m.uid)}</div><div><b>{m.profile?.displayName||m.uid.slice(0,8)}</b><small>{m.role}</small></div></div>)}</aside>}
+function ProfileModal({profile,user,onClose,onSaved}:{profile:UserProfile|null,user:User,onClose:()=>void,onSaved:(p:UserProfile)=>void}){return <SettingsModal profile={profile} user={user} onClose={onClose} onSaved={onSaved}/>}
+function SettingsModal({profile,user,onClose,onSaved}:{profile:UserProfile|null,user:User,onClose:()=>void,onSaved:(p:UserProfile)=>void}){const [name,setName]=useState(profile?.displayName||"");const [bio,setBio]=useState(profile?.bio||"");return <div className="v15-modal-wrap"><div className="v15-modal"><div className="v15-modal-head"><b>Profil ayarları</b><button onClick={onClose}>×</button></div><label>GÖRÜNEN AD<input value={name} onChange={e=>setName(e.target.value)}/></label><label>BIO<textarea value={bio} onChange={e=>setBio(e.target.value)} rows={4}/></label><div className="v15-modal-actions"><button onClick={onClose}>İptal</button><button className="v15-primary" onClick={async()=>{const next={...(profile||{}),username:profile?.username||user.email?.split("@")[0]||"user",usernameLower:profile?.usernameLower||user.email?.split("@")[0]?.toLowerCase()||"user",displayName:name||"User",bio,createdAt:profile?.createdAt||Date.now()};await update(ref(db,`users/${user.uid}/public`),next);onSaved(next as UserProfile);onClose()}}>Kaydet</button></div></div></div>}
+function CreateServerModal(){return null}
