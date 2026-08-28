@@ -2048,11 +2048,11 @@ export default function Home(){
         ) : activeView==="server" ? (
           <>
             <div className="server-title">
-              {isDemo ? <strong>AKAYROOM</strong> : <strong>{selectedServerData?.name}</strong>}
+              {isDemo ? <strong>AKAYROOM</strong> : <strong style={{flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{selectedServerData?.name}</strong>}
               {!isDemo && (()=>{ const myRole=members.find(m=>m.uid===user?.uid)?.role; const canManage=myRole==="owner"||myRole==="admin"; return (
-                <div style={{display:"flex", gap:6}}>
-                  <button onClick={()=>setShowMembers(v=>!v)} title="Üyeler" style={{width:26,height:26,border:"1px solid var(--border)",background: showMembers?"var(--accent)":"transparent",color: showMembers?"var(--accent-fg)":"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)"}}><span className="icon"><Icon name="users" size={13}/></span></button>
-                  {canManage && <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları" style={{width:26,height:26,border:"1px solid var(--border)",background: showServerSettings?"var(--accent)":"transparent",color: showServerSettings?"var(--accent-fg)":"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)"}}><span className="icon"><Icon name="settings" size={13}/></span></button>}
+                <div style={{display:"flex", gap:6, flex:"0 0 auto", alignItems:"center"}}>
+                  <button onClick={()=>setShowMembers(v=>!v)} title="Üyeler" style={{width:26,height:26,border:"1px solid var(--border)",background: showMembers?"var(--accent)":"transparent",color: showMembers?"var(--accent-fg)":"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)", flex:"0 0 auto"}}><Icon name="users" size={13}/></button>
+                  {canManage && <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları" style={{width:26,height:26,border:"1px solid var(--border)",background: showServerSettings?"var(--accent)":"transparent",color: showServerSettings?"var(--accent-fg)":"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)", flex:"0 0 auto"}}><Icon name="settings" size={13}/></button>}
                 </div>
               );})()}
             </div>
