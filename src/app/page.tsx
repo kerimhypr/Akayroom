@@ -126,7 +126,12 @@ export default function Home(){
   const [incomingCall,setIncomingCall]=useState<null|{threadId:string, fromUid:string, fromName?:string}>(null);
   const [callPip,setCallPip]=useState(false);
   const [callPipPos,setCallPipPos]=useState(()=>{
-    if(typeof window!=="undefined"){ try{ const p=JSON.parse(localStorage.getItem("akayroom_callPipPos")||"null"); if(p&&typeof p.x==="number"&&typeof p.y==="number") return p; }catch{} }
+    if(typeof window!=="undefined"){ try{ const p=JSON.parse(localStorage.getItem("akayroom_callPipPos")||"null"); if(p&&typeof p.x==="number"&&typeof p.y==="number"){
+      if(p.x===12 && p.y===12 && window.innerWidth > 400) return {x: Math.max(12, window.innerWidth - 80), y: Math.max(12, window.innerHeight - 80)};
+      // eski sol ustte kalan pip'i sag alta tasi (logo ile birlesme fix)
+      if(p.x < 80 && p.y < 80 && window.innerWidth > 400) return {x: Math.max(12, window.innerWidth - 80), y: Math.max(12, window.innerHeight - 80)};
+      return p;
+    } }catch{} }
     if(typeof window!=="undefined") return {x: Math.max(12, window.innerWidth - 80), y: Math.max(12, window.innerHeight - 80)};
     return {x:12,y:12};
   });
@@ -1478,88 +1483,22 @@ export default function Home(){
     }
   }
 
-  // Screen share with canvas re-encode at chosen resolution/fps
+  // Screen share — sade, dogrudan display track (canvas karmasikligi kaldirildi, arkadasinda %100 gorunur)
   async function startScreenShare(){
     if(!user || !joinedVoice) return;
     setShowScreenPanel(false);
     try{
-      const display = await navigator.mediaDevices.getDisplayMedia({
-        video: {width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:60}},
-        audio: false,
-      });
-      // stop previous cam stream so screen replaces it visually
+      const display = await navigator.mediaDevices.getDisplayMedia({video:{width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30}}, audio:false});
       if(camStreamRef.current){ camStreamRef.current.getTracks().forEach(tr=>{try{tr.stop();}catch{}}); camStreamRef.current = null; }
       setCamOn(false);
-
-      const vtr = display.getVideoTracks()[0];
-      const canvas = screenCanvasRef.current || document.createElement("canvas");
-      screenCanvasRef.current = canvas;
-      const ctx = canvas.getContext("2d")!;
-      const videoEl = document.createElement("video");
-      videoEl.srcObject = display;
-      videoEl.muted = true;
-      await videoEl.play().catch(()=>{});
-
-      const ctrl = new MediaStream();
-      let cap: MediaStream | null = null;
-      let capFps = 0;
-      let pumpTimer = 0;
-      const settings = () => screenSettingsRef.current;
-
-      const stopCapture = () => {
-        if(cap){ cap.getTracks().forEach(t=>{try{t.stop();}catch{}}); cap = null; capFps = 0; }
-      };
-
-      // Tek kare çiz + gerekiyorda capture akışını kur. rAF yerine setTimeout
-      // zinciri kullanıyoruz: sekme arka plana geçince rAF tamamen durur ve
-      // karşı taraf donuk/siyah görür; setTimeout ise (kısıtlı da olsa) çalışmaya devam eder.
-      const drawOnce = () => {
-        if(videoEl.videoWidth > 0 && videoEl.videoHeight > 0){
-          const s = settings();
-          canvas.width = s.w;
-          canvas.height = s.h;
-          const scale = Math.min(canvas.width / videoEl.videoWidth, canvas.height / videoEl.videoHeight);
-          const dw = videoEl.videoWidth * scale;
-          const dh = videoEl.videoHeight * scale;
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0,0,canvas.width,canvas.height);
-          ctx.drawImage(videoEl, (canvas.width-dw)/2, (canvas.height-dh)/2, dw, dh);
-          // rebuild capture if fps changed
-          if(cap && capFps !== s.fps){
-            stopCapture();
-          }
-          if(!cap){
-            cap = canvas.captureStream(s.fps);
-            capFps = s.fps;
-            ctrl.getTracks().forEach(t=>{try{t.stop();}catch{}});
-            cap.getVideoTracks().forEach(t=> ctrl.addTrack(t));
-            const capTrack = cap.getVideoTracks()[0] || null;
-            liveVideoTrackRef.current = capTrack;
-            replaceVideoTrackOnAllPeers(capTrack);
-          }
-        }
-      };
-      const pump = () => {
-        if(!screenCaptureActive.current) return;
-        drawOnce();
-        const interval = Math.max(15, Math.floor(1000 / Math.max(1, settings().fps * 2)));
-        pumpTimer = window.setTimeout(pump, interval);
-      };
-
       screenStreamRef.current = display;
-      screenCaptureActive.current = true;
+      const vtr = display.getVideoTracks()[0];
+      liveVideoTrackRef.current = vtr;
+      replaceVideoTrackOnAllPeers(vtr);
       setScreenSharing(true);
       setCamRemoteStatus("screen");
-      pump();
-
-      // when the user stops sharing via browser UI
       vtr.addEventListener("ended", ()=>{
-        screenCaptureActive.current = false;
-        window.clearTimeout(pumpTimer);
-        stopCapture();
-        ctrl.getTracks().forEach(t=>{try{t.stop();}catch{}});
-        if(display){ display.getTracks().forEach(t=>{try{t.stop();}catch{}}); }
-        screenStreamRef.current = null;
+        if(screenStreamRef.current){ screenStreamRef.current.getTracks().forEach(t=>{try{t.stop();}catch{}}); screenStreamRef.current = null; }
         liveVideoTrackRef.current = null;
         replaceVideoTrackOnAllPeers(null);
         setScreenSharing(false);
