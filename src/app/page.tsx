@@ -32,6 +32,7 @@ import { createStarterServer } from "@/lib/seed";
 import { normalizeUsername, usernameEmail, validUsername } from "@/lib/username";
 import { initials, fmtSize, fileToDataUrl, compressImage, attachmentKind, fmtTime, fmtDate } from "@/lib/format";
 import { EMOJIS, QUICK_REACTIONS, DECORATIONS, PRONOUNS_LIST, fallbackServers, fallbackChannels, fallbackCats } from "@/lib/constants";
+import { normalizeRepoArg, fetchGithubRepo, fetchMusicCard, fetchNowPlaying, searchGifs as searchGifsApi } from "@/lib/api";
 import { Icon } from "@/components/Icon";
 import { RenderContent, SearchHighlight } from "@/components/RenderContent";
 import type { Channel, ChatMessage, Category, MessageAttachmentMeta, Server, UserConnections, UserProfile, GithubCard, MusicCard } from "@/lib/types";
@@ -1069,16 +1070,13 @@ export default function Home(){
     else if(c.startsWith("/github")){
       const arg = cmd.slice(8).trim();
       if(!arg){ setToast("kullanım: /github vercel/next.js"); return; }
-      const repo = arg.split(/\s+/)[0].replace(/^https:\/\/github\.com\//,"").replace(/\.git$/,"");
-      if(!/^[^\/\s]+\/[^\/\s]+$/.test(repo)){ setToast("geçersiz repo — örnek: vercel/next.js"); return; }
+      const repo = normalizeRepoArg(arg);
+      if(!repo){ setToast("geçersiz repo — örnek: vercel/next.js"); return; }
       if(!user){ setToast("giriş gerekli"); return; }
       if(selectedServer==="demo"){ setToast("demo sunucuda mesaj yok"); return; }
       setToast(`github: ${repo} aranıyor…`);
       try{
-        const res = await fetch(`https://api.github.com/repos/${repo}`,{headers:{Accept:"application/vnd.github+json"}});
-        if(!res.ok) throw new Error(res.status===404 ? "repo bulunamadı" : `github ${res.status}`);
-        const j = await res.json();
-        const card: GithubCard = {fullName: j.full_name, description: j.description ?? null, stars: j.stargazers_count, forks: j.forks_count, language: j.language ?? null, htmlUrl: j.html_url, ownerAvatar: j.owner?.avatar_url, ownerLogin: j.owner?.login};
+        const card = await fetchGithubRepo(repo);
         const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
         await set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, authorName:profile?.displayName??username, content:`[github] ${card.fullName} — ${card.description||""}`.trim(), createdAt: Date.now(), githubCard: card});
         setToast(`✓ ${card.fullName}`);
@@ -1093,11 +1091,7 @@ export default function Home(){
       if(selectedServer==="demo"){ setToast("demo sunucuda mesaj yok"); return; }
       setToast(`music: "${q}" aranıyor…`);
       try{
-        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=1`);
-        const data = await res.json();
-        const first = data.results?.[0];
-        if(!first) throw new Error("sonuç yok");
-        const card: MusicCard = {trackName: first.trackName, artistName: first.artistName, artworkUrl: (first.artworkUrl100 as string)?.replace("100x100","300x300") ?? first.artworkUrl100, previewUrl: first.previewUrl ?? null, trackViewUrl: first.trackViewUrl, collectionName: first.collectionName, primaryGenre: first.primaryGenreName};
+        const card = await fetchMusicCard(q);
         const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
         await set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, authorName:profile?.displayName??username, content:`🎵 ${card.trackName} — ${card.artistName}`, createdAt: Date.now(), musicCard: card});
         setToast(`♪ ${card.trackName}`);
@@ -1121,11 +1115,7 @@ export default function Home(){
       }
       setToast(`dinliyor: "${q}" aranıyor…`);
       try{
-        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=1`);
-        const data = await res.json();
-        const first = data.results?.[0];
-        if(!first) throw new Error("şarkı bulunamadı");
-        const np = {track: first.trackName, artist: first.artistName, artwork: (first.artworkUrl100 as string)?.replace("100x100","300x300") ?? first.artworkUrl100, previewUrl: first.previewUrl ?? null, url: first.trackViewUrl, genre: first.primaryGenreName, updatedAt: Date.now()};
+        const np = await fetchNowPlaying(q);
         await update(ref(db,`users/${user.uid}/public`),{nowPlaying: np});
         setProfile(p=> p ? {...p, nowPlaying: np} : p);
         setToast(`♪ şimdi dinliyor: ${np.track} — ${np.artist}`);
@@ -1136,12 +1126,9 @@ export default function Home(){
   }
 
   async function searchGifs(){
-    const key=process.env.NEXT_PUBLIC_GIPHY_API_KEY;
-    if(!key || !gifSearch.trim()){ setGifResults([]); setToast("Giphy anahtarı yok"); return; }
+    if(!process.env.NEXT_PUBLIC_GIPHY_API_KEY || !gifSearch.trim()){ setGifResults([]); setToast("Giphy anahtarı yok"); return; }
     try{
-      const res=await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(gifSearch)}&limit=6`);
-      const data=await res.json();
-      setGifResults(data.data?.map((x:any)=>x.images?.fixed_height?.url).filter(Boolean)??[]);
+      setGifResults(await searchGifsApi(gifSearch));
     }catch{ setToast("giphy hatası"); }
   }
 
