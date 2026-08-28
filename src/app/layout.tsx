@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./mobile.css";
 import ClientOnly from "@/components/ClientOnly";
+import MobileMenuBridge from "@/components/MobileMenuBridge";
 
 export const metadata: Metadata = {
   title: "AKAYROOM",
@@ -23,5 +24,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="tr"><body><ClientOnly>{children}</ClientOnly></body></html>;
+  return <html lang="tr"><body><MobileMenuBridge /><ClientOnly>{children}</ClientOnly></body></html>;
 }
