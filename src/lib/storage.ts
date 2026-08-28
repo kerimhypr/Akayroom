@@ -3,37 +3,20 @@ import { getAuth } from "firebase/auth";
 const STORAGE_BUCKET = "cizbull.firebasestorage.app";
 const STORAGE_BASE = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o`;
 
-function encPath(p: string): string {
-  return encodeURIComponent(p).replace(/%2F/g, "/");
-}
-
-export async function uploadAttachment(
-  path: string,
-  data: string,
-  mime: string
-): Promise<string> {
+export async function uploadAttachment(path: string, dataUrl: string, mime: string): Promise<string> {
   const auth = getAuth();
   const user = auth.currentUser;
   if (!user) throw new Error("giriş gerekli");
   const token = await user.getIdToken();
-
-  const boundary = "akayroom_boundary_" + Date.now();
-  const meta = JSON.stringify({ name: path.split("/").pop(), contentType: mime });
-
-  const bodyArr = [
-    `--${boundary}`,
-    'Content-Type: application/json; charset=utf-8',
-    '',
-    meta,
-    `--${boundary}`,
-    `Content-Type: ${mime}`,
-    'Content-Transfer-Encoding: base64',
-    '',
-    data,
-    `--${boundary}--`,
-    '',
-  ];
-  const body = bodyArr.join("\r\n");
+  const comma = dataUrl.indexOf(",");
+  const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  const boundary = `akayroom_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const meta = JSON.stringify({ name: path.split("/").pop() || "file", contentType: mime });
+  const body = [
+    `--${boundary}\r\nContent-Type: application/json; charset=utf-8\r\n\r\n${meta}\r\n`,
+    `--${boundary}\r\nContent-Type: ${mime}\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64}\r\n`,
+    `--${boundary}--\r\n`,
+  ].join("");
 
   const url = `${STORAGE_BASE}?uploadType=multipart&name=${encodeURIComponent(path)}`;
   const res = await fetch(url, {
@@ -44,17 +27,18 @@ export async function uploadAttachment(
     },
     body,
   });
+  let json: any = null;
+  try { json = await res.json(); } catch {}
   if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`upload failed: ${res.status} ${errText.slice(0, 120)}`);
+    throw new Error(`upload failed: ${res.status}${json?.error?.message ? ` ${json.error.message}` : ""}`);
   }
-  const json = (await res.json()) as { downloadTokens?: string };
-  if (!json.downloadTokens) throw new Error("download token yok");
-  return json.downloadTokens;
+  const downloadTokens = typeof json?.downloadTokens === "string" ? json.downloadTokens.split(",")[0] : "";
+  if (!downloadTokens) throw new Error("download token yok");
+  return downloadTokens;
 }
 
 export function storageDownloadUrl(path: string, token: string): string {
-  return `${STORAGE_BASE}/${encodeURIComponent(path)}?alt=media&token=${token}`;
+  return `${STORAGE_BASE}/${encodeURIComponent(path)}?alt=media&token=${encodeURIComponent(token)}`;
 }
 
 export function attachmentStoragePath(
