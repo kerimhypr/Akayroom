@@ -3640,8 +3640,8 @@ export default function Home(){
             {(camOn||screenSharing) && <span className="pip-cam"><Icon name="cam" size={9}/></span>}
           </div>
         ) : (
-          <div className="call-overlay">
-            <div className="call-window" style={screenSharing || Object.values(remoteCamStatus).includes("screen") ? {maxWidth:760, width:"min(760px, 96vw)"} : undefined}>
+          <div className="call-overlay voice-full">
+            <div className="call-window">
               <div className="call-head">
                 <div>
                   <div className="call-title">● {callTitle}</div>

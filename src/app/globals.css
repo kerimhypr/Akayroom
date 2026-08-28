@@ -795,6 +795,36 @@ mark { background:var(--accent); color:var(--accent-fg); padding:0 2px; border-r
 @keyframes ringPulse { 0%{ box-shadow:0 0 0 0 rgba(139,92,246,.55);} 70%{ box-shadow:0 0 0 14px rgba(139,92,246,0);} 100%{ box-shadow:0 0 0 0 rgba(139,92,246,0);} }
 .call-audios { display:none; }
 
+/* --- Fullscreen voice redesign (bastan yaz) --- */
+.call-overlay.voice-full { background: var(--bg); padding:0; align-items:stretch; justify-content:stretch; }
+.call-overlay.voice-full .call-window { max-width:none; width:100vw; height:100vh; max-height:100vh; border:none; border-radius:0; background: var(--bg); display:flex; flex-direction:column; padding:0; box-shadow:none; }
+.voice-topbar { height:58px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; background: var(--surface); flex:0 0 auto; }
+.voice-topbar .call-title { font-size:14px; }
+.voice-stage-full { flex:1; background:#000; display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden; min-height:0; }
+.voice-stage-full video { width:100%; height:100%; object-fit:contain; background:#000; display:block; }
+.voice-grid-full { flex:1; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:20px; padding:32px; align-content:center; justify-items:center; overflow:auto; background: var(--bg); min-height:0; }
+.voice-tile-large { width:100%; max-width:320px; min-height:200px; border:1px solid var(--border-strong); background: var(--surface-2); border-radius: var(--r-lg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; position:relative; overflow:hidden; }
+.voice-tile-large .call-avatar { width:96px; height:96px; font-size:28px; box-shadow: var(--shadow-1); }
+.voice-tile-large .call-name { font-size:14px; font-weight:700; }
+.voice-tile-large .call-status { font-size:11px; }
+.voice-controls-full { height:86px; border-top:1px solid var(--border); background: var(--surface); display:flex; align-items:center; justify-content:center; gap:14px; padding:0 20px; flex:0 0 auto; }
+.voice-controls-full button { width:54px; height:54px; border-radius: var(--r-full); border:1px solid var(--border); background: var(--surface-2); color: var(--text); display:grid; place-items:center; cursor:pointer; font-size:18px; transition: all var(--t-med) var(--ease); flex:0 0 auto; }
+.voice-controls-full button.active { background: var(--accent-soft); color:var(--accent); border-color:var(--accent-border); box-shadow: 0 0 16px rgba(139,92,246,.25); }
+.voice-controls-full button:hover { border-color:var(--border-strong); background:var(--surface-3); }
+.voice-controls-full button.danger { background:var(--danger); color:#fff; width:auto; padding:0 22px; border-radius:999px; border:none; box-shadow: 0 6px 22px rgba(242,63,66,.4); font-size:13px; font-weight:700; }
+.voice-controls-full button.danger:hover { background:#d93436; }
+
+/* — override small call UI when voice-full (bastan yaz buyuk) — */
+.call-overlay.voice-full .call-grid { flex:1; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:20px; padding:32px; align-content:center; justify-items:center; overflow:auto; min-height:0; }
+.call-overlay.voice-full .call-card { width:100%; max-width:340px; min-height:220px; height:auto; padding:20px; gap:12px; }
+.call-overlay.voice-full .call-video-box { height:160px; }
+.call-overlay.voice-full .call-avatar { width:96px; height:96px; font-size:28px; }
+.call-overlay.voice-full .call-empty { grid-column: 1 / -1; max-width:400px; justify-self:center; }
+.call-overlay.voice-full .call-controls { height:86px; border-top:1px solid var(--border); background: var(--surface); gap:14px; padding:0 20px; flex:0 0 auto; }
+.call-overlay.voice-full .call-controls button { width:54px; height:54px; }
+.call-overlay.voice-full .call-stage { margin-bottom:0; border-radius:0; border:none; flex:1; }
+.call-overlay.voice-full .call-stage-video { height:100% !important; max-height:70vh; }
+
 .screen-panel { border:1px solid var(--border); background:var(--bg); padding:14px; margin-top:12px; border-radius: var(--r-md); }
 .screen-settings-btn { border:1px solid var(--border); background:transparent; color:var(--muted); font-family:var(--font-mono); font-size:10.5px; padding:4px 9px; cursor:pointer; border-radius: var(--r-xs); transition: all var(--t-med) var(--ease); }
 .screen-settings-btn:hover { background:var(--accent-soft); color:var(--accent); border-color:var(--accent-border); }
