@@ -2519,7 +2519,7 @@ export default function Home(){
                   <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"var(--danger)"}}><span className="icon"><Icon name="trash" size={12}/></span></button>
                   <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları"><span className="icon"><Icon name="settings" size={12}/></span></button>
                 </>);})()}
-                <button onClick={()=>setShowPalette(true)}>⌘K</button>
+                <button onClick={()=>setShowPalette(true)} title="Komut paleti (Ctrl+K)" className="h-icon"><span style={{fontFamily:"var(--font-mono)",fontSize:11,fontWeight:700,letterSpacing:".04em"}}>⌘K</span></button>
               </div>
             </header>
 
@@ -2851,7 +2851,7 @@ export default function Home(){
                 <div className="member-group-title">ÇEVRİMİÇİ — {members.length}</div>
                 {members.map(m=>(
                   <div key={m.uid} className="member-row" style={{alignItems:"flex-start", cursor:"pointer"}} onClick={()=>openProfile(m.uid)}>
-                    <button className="m-av" onClick={(e)=>{e.stopPropagation(); openProfile(m.uid);}} style={{cursor:"pointer", display:"grid", placeItems:"center"}}>{m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}<i className="status-dot online"/></button>
+                    <div className="m-av" role="button" tabIndex={0} onKeyDown={(e)=>{if(e.key==="Enter"||e.key===" "){e.preventDefault(); openProfile(m.uid);}}} style={{cursor:"pointer", display:"grid", placeItems:"center"}}>{m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}<i className="status-dot online"/></div>
                     <div style={{flex:1, minWidth:0}}><div className="m-name">{m.profile?.displayName||m.profile?.username}</div><small>{m.role}</small>{m.profile?.nowPlaying && <small style={{display:"flex", alignItems:"center", gap:4, color:"var(--spotify)", marginTop:2}}><span className="icon"><Icon name="music" size={10}/></span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile.nowPlaying.track} — {m.profile.nowPlaying.artist}</span></small>}</div>
                   </div>
                 ))}
