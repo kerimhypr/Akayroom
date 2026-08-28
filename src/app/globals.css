@@ -696,10 +696,14 @@ mark { background:#fff; color:#000; padding:0 2px; }
 @keyframes slideUp { from { opacity:0; transform:translateY(10px)} to { opacity:1; transform:translateY(0)} }
 @keyframes slideDown { from { opacity:0; transform:translateY(-8px)} to { opacity:1; transform:translateY(0)} }
 @keyframes gridPulse { 0%,100%{opacity:.25} 50%{opacity:.4} }
-@keyframes msgIn { from { opacity:0 } to { opacity:1 } }
+@keyframes msgIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
+@keyframes composerPop { 0%{transform:scale(.98)} 40%{transform:scale(1.01)} 100%{transform:scale(1)} }
 .animate-fade { animation: fadeIn .5s ease-out both; }
 .animate-slide { animation: slideUp .5s ease-out both; }
-.msg-animate { animation: none; }
+.msg-animate { animation: msgIn .22s ease-out both; }
+.composer.sending { animation: composerPop .22s ease-out both; }
+.message-area { scroll-behavior: smooth; }
+.composer-input { transition: border-color .15s, box-shadow .15s; }
 .picker, .modal, .palette, .thread-drawer, .context-menu { animation: slideDown .18s ease-out both; }
 
 /* --- LANDING --- */

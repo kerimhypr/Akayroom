@@ -356,6 +356,7 @@ export default function Home(){
   const [showLanding,setShowLanding]=useState(true);
   const [pendingFile,setPendingFile]=useState<{file:File,preview?:string}|null>(null);
   const [sendingAttachment,setSendingAttachment]=useState(false);
+  const [composerSending,setComposerSending]=useState(false);
   const [attCache,setAttCache]=useState<Record<string,{loading:boolean,dataUrl?:string,mime?:string,type?:MessageAttachmentMeta["type"],error?:string}>>({});
   const [lightbox,setLightbox]=useState<{src:string,name:string}|null>(null);
   const [unread,setUnread]=useState<Record<string, number>>({});
@@ -1171,6 +1172,14 @@ export default function Home(){
     };
     if(attMeta) payload.attachment = attMeta;
     if(replyTo) payload.replyTo={ id: replyTo.id, authorName: replyTo.authorName, content: replyTo.content.slice(0,120) };
+    // optimistic + anlık animasyon
+    const optimisticId = msgRef.key!;
+    const optimisticMsg: ChatMessage = { id: optimisticId, ...payload, createdAt: payload.createdAt } as ChatMessage;
+    if(attMeta && attData){ (optimisticMsg as any)._localPreview = attData; }
+    setMessages(prev=> [...prev, optimisticMsg]);
+    if(attMeta && attData){ setAttCache(prev=> ({...prev, [optimisticId]: {loading:false, dataUrl: attData!, mime: pendingFile?.file.type, type: attMeta!.type}})); }
+    setComposerSending(true); setTimeout(()=>setComposerSending(false), 280);
+    messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
     try{
       await set(msgRef,payload);
       if(attMeta && attData && msgRef.key){
@@ -1181,6 +1190,9 @@ export default function Home(){
       setDraft(""); updateDraft(""); setReplyTo(null); setPendingFile(null); setSendingAttachment(false);
       remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
     }catch(e:any){
+      // geri al optimistic
+      setMessages(prev=> prev.filter(m=>m.id!==optimisticId));
+      setAttCache(prev=>{ const n={...prev}; delete n[optimisticId]; return n; });
       setToast(e?.message ? `mesaj gönderilemedi: ${e.message.slice(0,80)}` : "mesaj gönderilemedi — bağlantını kontrol et");
       setSendingAttachment(false);
     }
@@ -2743,7 +2755,7 @@ export default function Home(){
                     <button onClick={()=>setReplyTo(null)} style={{border:"1px solid var(--border)", background:"transparent", padding:"2px 6px"}}>✕</button>
                   </div>
                 )}
-                <form className="composer" onSubmit={sendMessage} style={{alignItems:"center"}}>
+                <form className={`composer ${composerSending ? "sending":""}`} onSubmit={sendMessage} style={{alignItems:"center"}}>
                   <button type="button" onClick={()=>setShowPlusMenu(v=>!v)} className="composer-plus" title="Dosya ekle">＋</button>
                   <div className="composer-main">
                     <textarea
