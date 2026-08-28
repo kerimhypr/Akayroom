@@ -22,6 +22,15 @@ export type UserProfile = {
   status?: "online" | "idle" | "dnd" | "offline" | "invisible";
   statusText?: string;
   connections?: UserConnections;
+  nowPlaying?: {
+    track: string;
+    artist: string;
+    artwork?: string;
+    previewUrl?: string | null;
+    url?: string;
+    genre?: string;
+    updatedAt: number;
+  } | null;
   createdAt: number;
 };
 
@@ -79,6 +88,27 @@ export type MessageAttachmentMeta = {
   size: number;
 };
 
+export type GithubCard = {
+  fullName: string;
+  description: string | null;
+  stars: number;
+  forks: number;
+  language: string | null;
+  htmlUrl: string;
+  ownerAvatar: string;
+  ownerLogin: string;
+};
+
+export type MusicCard = {
+  trackName: string;
+  artistName: string;
+  artworkUrl: string;
+  previewUrl: string | null;
+  trackViewUrl: string;
+  collectionName: string;
+  primaryGenre?: string;
+};
+
 export type Reaction = {
   emoji: string;
   count: number;
@@ -118,6 +148,8 @@ export type ChatMessage = {
   isAiTwin?: boolean;
   twinOfUid?: string;
   poll?: Poll | null;
+  githubCard?: GithubCard | null;
+  musicCard?: MusicCard | null;
   threadId?: string | null;
   mentions?: string[];
 };

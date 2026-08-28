@@ -789,3 +789,20 @@ mark { background:#fff; color:#000; padding:0 2px; }
 
 .avatar img, .msg-avatar img, .m-av img, .dm-av img, .cu-avatar img { border-radius:50%; width:100%; height:100%; object-fit:cover; }
 .channel-row:hover .ch-actions-hover { opacity:1 !important; }
+
+/* --- GITHUB / MUSIC CARDS --- */
+.github-card { display:block; margin-top:8px; border:1px solid var(--border); background: var(--surface-2); max-width:420px; text-decoration:none; color:inherit; overflow:hidden; }
+.github-card:hover { border-color:#fff; }
+.github-card-head { display:flex; align-items:center; gap:6px; padding:6px 10px; border-bottom:1px solid var(--border); background:#000; font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.08em; }
+.github-card-body { display:flex; gap:10px; padding:10px; }
+.github-card-avatar { width:36px; height:36px; border:1px solid var(--border); border-radius:0; flex:0 0 auto; }
+.github-card-title { font-family:var(--font-mono); font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.github-card-desc { font-size:11px; color:var(--muted); line-height:1.4; margin-top:2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.github-card-stats { display:flex; gap:10px; margin-top:6px; font-family:var(--font-mono); font-size:10px; color:var(--muted); }
+
+.music-card { display:flex; gap:10px; margin-top:8px; border:1px solid var(--border); background: var(--surface-2); max-width:420px; padding:10px; align-items:center; }
+.music-card-art { width:64px; height:64px; border:1px solid var(--border); object-fit:cover; flex:0 0 auto; }
+.music-card-title { font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.music-card-artist { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.music-card-genre { font-family:var(--font-mono); font-size:9px; color:var(--dim); margin-top:2px; text-transform:uppercase; letter-spacing:.06em; }
+.music-card-actions { display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap; }

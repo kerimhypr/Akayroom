@@ -30,7 +30,7 @@ import { auth, db, firebaseConfigured } from "@/lib/firebase";
 import { rtcIceServers, joinSignalRoom, listenForParticipants, listenForCandidates, publishCandidate, publishOffer, publishAnswer, listenForOffers, listenForAnswers, deterministicInitiator, cleanupSignalRoom, ringDmCall, acceptDmCall, endDmCall, listenDmCall } from "@/lib/webrtc";
 import { createStarterServer } from "@/lib/seed";
 import { normalizeUsername, usernameEmail, validUsername } from "@/lib/username";
-import type { Channel, ChatMessage, Category, MessageAttachmentMeta, Server, UserConnections, UserProfile } from "@/lib/types";
+import type { Channel, ChatMessage, Category, MessageAttachmentMeta, Server, UserConnections, UserProfile, GithubCard, MusicCard } from "@/lib/types";
 
 function initials(v: string) { return (v?.trim()?.slice(0,2) || "??").toUpperCase(); }
 function fmtSize(bytes: number){ if(!bytes && bytes!==0) return ""; if(bytes<1024) return bytes+" B"; if(bytes<1024*1024) return (bytes/1024).toFixed(0)+" KB"; return (bytes/1024/1024).toFixed(1)+" MB"; }
@@ -101,6 +101,8 @@ function Icon({name, size=14}: {name: string, size?: number}){
     check: <><polyline points="20 6 9 17 4 12"/></>,
     arrowLeft: <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
     close: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    github: <><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></>,
+    music: <><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>,
   };
   return <svg {...common}>{paths[name] ?? paths.hash}</svg>;
 }
@@ -1109,7 +1111,7 @@ export default function Home(){
     if(!selectedChannelData || selectedChannelData.type==="voice"){ setToast("ses kanalına mesaj gönderilmez"); return; }
     if(sendingAttachment) return;
     if(content.startsWith("/") && !pendingFile){
-      handleCommand(content);
+      await handleCommand(content);
       setDraft(""); updateDraft("");
       remove(ref(db,`typing/${selectedServer}/${selectedChannel}/${user.uid}`)).catch(()=>{});
       return;
@@ -1193,17 +1195,88 @@ export default function Home(){
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  function handleCommand(cmd:string){
+  async function handleCommand(cmd:string){
     const c=cmd.toLowerCase();
-    if(c.startsWith("/help")){ setHelpOpen(true); }
-    else if(c.startsWith("/giphy")){ setToast("giphy için ＋ → GIF kullan"); }
-    else if(c.startsWith("/shrug")){ const msg= "¯\\_(ツ)_/¯ "+cmd.slice(7); const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`)); set(r,{serverId:selectedServer,channelId:selectedChannel,authorId:user!.uid,content:msg,authorName:profile?.displayName??username,createdAt:Date.now()}); }
-    else if(c.startsWith("/me")){ const msg= `*${profile?.displayName??username} ${cmd.slice(4)}*`; const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`)); set(r,{serverId:selectedServer,channelId:selectedChannel,authorId:user!.uid,content:msg,authorName:profile?.displayName??username,createdAt:Date.now()}); }
-    else if(c.startsWith("/clear")){ setToast("yerel önbellek temizlendi — yenilemede mesajlar geri gelir"); setMessages([]); }
-    else if(c.startsWith("/invite")){ setShowInvite(true); }
-    else if(c.startsWith("/poll")){ setShowPoll(true); }
-    else if(c.startsWith("/nick")){ const n=cmd.slice(6).trim(); if(n) set(ref(db,`users/${user!.uid}/public/displayName`),n).then(()=>setProfile(p=>p?{...p,displayName:n}:p)); setToast("nick → "+n); }
-    else setToast(`bilinmeyen komut: ${cmd.split(" ")[0]}`);
+    if(c.startsWith("/help")){ setHelpOpen(true); return; }
+    else if(c.startsWith("/giphy")){ setToast("giphy için ＋ → GIF kullan"); return; }
+    else if(c.startsWith("/shrug")){ const msg= "¯\\_(ツ)_/¯ "+cmd.slice(7); const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`)); set(r,{serverId:selectedServer,channelId:selectedChannel,authorId:user!.uid,content:msg,authorName:profile?.displayName??username,createdAt:Date.now()}); return; }
+    else if(c.startsWith("/me")){ const msg= `*${profile?.displayName??username} ${cmd.slice(4)}*`; const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`)); set(r,{serverId:selectedServer,channelId:selectedChannel,authorId:user!.uid,content:msg,authorName:profile?.displayName??username,createdAt:Date.now()}); return; }
+    else if(c.startsWith("/clear")){ setToast("yerel önbellek temizlendi — yenilemede mesajlar geri gelir"); setMessages([]); return; }
+    else if(c.startsWith("/invite")){ setShowInvite(true); return; }
+    else if(c.startsWith("/poll")){ setShowPoll(true); return; }
+    else if(c.startsWith("/nick")){ const n=cmd.slice(6).trim(); if(n) set(ref(db,`users/${user!.uid}/public/displayName`),n).then(()=>setProfile(p=>p?{...p,displayName:n}:p)); setToast("nick → "+n); return; }
+    else if(c.startsWith("/github")){
+      const arg = cmd.slice(8).trim();
+      if(!arg){ setToast("kullanım: /github vercel/next.js"); return; }
+      const repo = arg.split(/\s+/)[0].replace(/^https:\/\/github\.com\//,"").replace(/\.git$/,"");
+      if(!/^[^\/\s]+\/[^\/\s]+$/.test(repo)){ setToast("geçersiz repo — örnek: vercel/next.js"); return; }
+      if(!user){ setToast("giriş gerekli"); return; }
+      if(selectedServer==="demo"){ setToast("demo sunucuda mesaj yok"); return; }
+      setToast(`github: ${repo} aranıyor…`);
+      try{
+        const res = await fetch(`https://api.github.com/repos/${repo}`,{headers:{Accept:"application/vnd.github+json"}});
+        if(!res.ok) throw new Error(res.status===404 ? "repo bulunamadı" : `github ${res.status}`);
+        const j = await res.json();
+        const card: GithubCard = {fullName: j.full_name, description: j.description ?? null, stars: j.stargazers_count, forks: j.forks_count, language: j.language ?? null, htmlUrl: j.html_url, ownerAvatar: j.owner?.avatar_url, ownerLogin: j.owner?.login};
+        const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
+        await set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, authorName:profile?.displayName??username, content:`[github] ${card.fullName} — ${card.description||""}`.trim(), createdAt: Date.now(), githubCard: card});
+        setToast(`✓ ${card.fullName}`);
+      }catch(e:any){ setToast(e?.message || "github hatası"); }
+      return;
+    }
+    else if(c.startsWith("/music") || c.startsWith("/song")){
+      const prefix = c.startsWith("/music") ? 6 : 5;
+      const q = cmd.slice(prefix).trim();
+      if(!q){ setToast("kullanım: /music <şarkı - sanatçı>   örnek: /music tarkan şımarık"); return; }
+      if(!user){ setToast("giriş gerekli"); return; }
+      if(selectedServer==="demo"){ setToast("demo sunucuda mesaj yok"); return; }
+      setToast(`music: "${q}" aranıyor…`);
+      try{
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=1`);
+        const data = await res.json();
+        const first = data.results?.[0];
+        if(!first) throw new Error("sonuç yok");
+        const card: MusicCard = {trackName: first.trackName, artistName: first.artistName, artworkUrl: (first.artworkUrl100 as string)?.replace("100x100","300x300") ?? first.artworkUrl100, previewUrl: first.previewUrl ?? null, trackViewUrl: first.trackViewUrl, collectionName: first.collectionName, primaryGenre: first.primaryGenreName};
+        const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
+        await set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, authorName:profile?.displayName??username, content:`🎵 ${card.trackName} — ${card.artistName}`, createdAt: Date.now(), musicCard: card});
+        setToast(`♪ ${card.trackName}`);
+      }catch(e:any){ setToast(e?.message || "music hatası"); }
+      return;
+    }
+    else if(c.startsWith("/np") || c.startsWith("/playing") || c.startsWith("/dinliyor")){
+      const cmdLower = c;
+      let q = "";
+      if(cmdLower.startsWith("/np")) q = cmd.slice(3).trim();
+      else if(cmdLower.startsWith("/playing")) q = cmd.slice(8).trim();
+      else q = cmd.slice(9).trim();
+      if(!user){ setToast("giriş gerekli"); return; }
+      if(!q || q.toLowerCase()==="clear" || q.toLowerCase()==="off" || q.toLowerCase()==="kapat"){
+        try{
+          await update(ref(db,`users/${user.uid}/public`),{nowPlaying: null});
+          setProfile(p=> p ? {...p, nowPlaying: null} : p);
+          setToast("dinliyor durumu temizlendi");
+        }catch{ setToast("temizlenemedi"); }
+        return;
+      }
+      setToast(`dinliyor: "${q}" aranıyor…`);
+      try{
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=1`);
+        const data = await res.json();
+        const first = data.results?.[0];
+        if(!first) throw new Error("şarkı bulunamadı");
+        const np = {track: first.trackName, artist: first.artistName, artwork: (first.artworkUrl100 as string)?.replace("100x100","300x300") ?? first.artworkUrl100, previewUrl: first.previewUrl ?? null, url: first.trackViewUrl, genre: first.primaryGenreName, updatedAt: Date.now()};
+        await update(ref(db,`users/${user.uid}/public`),{nowPlaying: np});
+        setProfile(p=> p ? {...p, nowPlaying: np} : p);
+        setToast(`♪ şimdi dinliyor: ${np.track} — ${np.artist}`);
+        if(selectedServer!=="demo" && selectedChannelData?.type==="text"){
+          const r=push(ref(db,`messages/${selectedServer}/${selectedChannel}`));
+          const card: MusicCard = {trackName: first.trackName, artistName: first.artistName, artworkUrl: (first.artworkUrl100 as string)?.replace("100x100","300x300") ?? first.artworkUrl100, previewUrl: first.previewUrl ?? null, trackViewUrl: first.trackViewUrl, collectionName: first.collectionName, primaryGenre: first.primaryGenreName};
+          await set(r,{serverId:selectedServer, channelId:selectedChannel, authorId:user.uid, authorName:profile?.displayName??username, content:`🎧 şimdi dinliyor: ${card.trackName} — ${card.artistName}`, createdAt: Date.now(), musicCard: card});
+        }
+      }catch(e:any){ setToast(e?.message || "np hatası"); }
+      return;
+    }
+    else setToast(`bilinmeyen komut: ${cmd.split(" ")[0]} — /help yaz`);
   }
 
   async function searchGifs(){
@@ -1893,6 +1966,9 @@ export default function Home(){
     {id:"3",label:"Sunucu oluştur",action:()=>{setShowCreateServer(true); setShowPalette(false);},kbd:"⌘ N"},
     {id:"4",label:"Komutlar: /help",action:()=>{setHelpOpen(true); setShowPalette(false);},kbd:"/"},
     {id:"5",label:"Anket başlat (/poll)",action:()=>{setShowPoll(true); setShowPalette(false);},kbd:"/poll"},
+    {id:"6",label:"GitHub repo kartı (/github)",action:()=>{setHelpOpen(true); setShowPalette(false);},kbd:"/github"},
+    {id:"7",label:"Şarkı paylaş (/music)",action:()=>{setHelpOpen(true); setShowPalette(false);},kbd:"/music"},
+    {id:"8",label:"Dinliyor durumu (/np)",action:()=>{setHelpOpen(true); setShowPalette(false);},kbd:"/np"},
   ].filter(it=> !paletteQ || it.label.toLowerCase().includes(paletteQ.toLowerCase()));
 
   return (
@@ -2001,6 +2077,7 @@ export default function Home(){
                   <div className="cu-meta">
                     <strong>{profile?.displayName ?? username}</strong>
                     <small>@{profile?.username ?? username}</small>
+                    {profile?.nowPlaying && <small style={{color:"#1DB954", display:"flex", alignItems:"center", gap:3, marginTop:2}}><span>♪</span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{profile.nowPlaying.track}</span></small>}
                   </div>
                   <div className="cu-actions">
                     <button onClick={()=>setShowAccountSettings(true)} title="Kullanıcı Ayarları"><span className="icon"><Icon name="settings"/></span></button>
@@ -2423,10 +2500,13 @@ export default function Home(){
                   </div>
                   {[
                     ["/help","bu paneli açar"],
-                    ["/me <eylem>","italik eylem mesajı atar — /me kod yazıyor"],
+                    ["/me <eylem>","italik eylem mesajı — /me kod yazıyor"],
                     ["/shrug <mesaj>","¯\\_(ツ)_/¯ ekler"],
                     ["/nick <isim>","görünen adını değiştirir"],
-                    ["/poll","anket oluşturur (＋ → POLL aynı işi yapar)"],
+                    ["/poll","anket oluşturur (＋ → POLL)"],
+                    ["/github <owner/repo>","GitHub repo kartı — /github vercel/next.js"],
+                    ["/music <şarkı> | /song","iTunes ile şarkı kartı + 30sn preview — /music tarkan"],
+                    ["/np <şarkı> | /playing","şimdi dinliyor durumunu ayarla — /np şımarık — /np clear ile kapat"],
                     ["/invite","davet kodu üretir"],
                     ["/clear","ekranı yerel olarak temizler"],
                     ["Ctrl+K","hızlı komut paleti — kanal ara, komut çalıştır"],
@@ -2542,6 +2622,33 @@ export default function Home(){
                               </div>
                             );
                           })()}
+                          {m.githubCard && (
+                            <a href={m.githubCard.htmlUrl} target="_blank" rel="noopener noreferrer" className="github-card" onClick={e=>e.stopPropagation()}>
+                              <div className="github-card-head"><span className="icon"><Icon name="github" size={14}/></span> GITHUB <span style={{marginLeft:"auto", fontSize:9, color:"var(--muted)"}}>{m.githubCard.language||""}</span></div>
+                              <div className="github-card-body">
+                                <img src={m.githubCard.ownerAvatar} alt="" className="github-card-avatar"/>
+                                <div style={{flex:1, minWidth:0}}>
+                                  <div className="github-card-title">{m.githubCard.fullName}</div>
+                                  {m.githubCard.description && <div className="github-card-desc">{m.githubCard.description}</div>}
+                                  <div className="github-card-stats"><span>★ {m.githubCard.stars.toLocaleString("tr-TR")}</span><span>⑂ {m.githubCard.forks.toLocaleString("tr-TR")}</span><span style={{marginLeft:"auto", fontSize:9, color:"var(--muted)"}}>github.com</span></div>
+                                </div>
+                              </div>
+                            </a>
+                          )}
+                          {m.musicCard && (
+                            <div className="music-card">
+                              <img src={m.musicCard.artworkUrl} alt="" className="music-card-art"/>
+                              <div style={{flex:1, minWidth:0}}>
+                                <div className="music-card-title">{m.musicCard.trackName}</div>
+                                <div className="music-card-artist">{m.musicCard.artistName} • {m.musicCard.collectionName}</div>
+                                {m.musicCard.primaryGenre && <div className="music-card-genre">{m.musicCard.primaryGenre}</div>}
+                                <div className="music-card-actions">
+                                  {m.musicCard.previewUrl && <audio src={m.musicCard.previewUrl} controls preload="none" style={{height:28, width:"100%", maxWidth:240}}/>}
+                                  <a href={m.musicCard.trackViewUrl} target="_blank" rel="noopener noreferrer" className="btn" style={{fontSize:9, padding:"4px 8px"}}>Apple Music →</a>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           {Object.keys(reactions).length>0 && (
                             <div className="msg-reactions">
                               {Object.entries(reactions).map(([emoji,info])=>(
@@ -2711,9 +2818,9 @@ export default function Home(){
               <div className="member-group">
                 <div className="member-group-title">ÇEVRİMİÇİ — {members.length}</div>
                 {members.map(m=>(
-                  <div key={m.uid} className="member-row">
+                  <div key={m.uid} className="member-row" style={{alignItems:"flex-start"}}>
                     <button className="m-av" onClick={()=>openProfile(m.uid)} style={{cursor:"pointer", display:"grid", placeItems:"center"}}>{m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}<i className="status-dot online"/></button>
-                    <div style={{flex:1, minWidth:0}}><div className="m-name">{m.profile?.displayName||m.profile?.username}</div><small>{m.role}</small></div>
+                    <div style={{flex:1, minWidth:0}}><div className="m-name">{m.profile?.displayName||m.profile?.username}</div><small>{m.role}</small>{m.profile?.nowPlaying && <small style={{display:"flex", alignItems:"center", gap:4, color:"#1DB954", marginTop:2}}><span style={{fontSize:9}}>♪</span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile.nowPlaying.track} — {m.profile.nowPlaying.artist}</span></small>}</div>
                   </div>
                 ))}
               </div>
@@ -3274,6 +3381,17 @@ export default function Home(){
                     {selectedProfile.accentColor && <span style={{width:8, height:8, background:selectedProfile.accentColor, border:"1px solid var(--border)", display:"inline-block"}}/>}
                   </div>
                   <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>@{selectedProfile.username} • {selectedProfile.customStatusEmoji || ""} {selectedProfile.customStatus || selectedProfile.statusText || ""}</div>
+                  {selectedProfile.nowPlaying && (
+                    <div style={{marginTop:10, border:"1px solid #1DB954", background:"#0a1a0f", padding:8, display:"flex", gap:8, alignItems:"center"}}>
+                      {selectedProfile.nowPlaying.artwork && <img src={selectedProfile.nowPlaying.artwork} alt="" style={{width:40, height:40, border:"1px solid #1DB954", flex:"0 0 auto"}}/>}
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:9, color:"#1DB954", fontWeight:700, letterSpacing:".08em"}}>♪ ŞU AN DİNLİYOR</div>
+                        <div style={{fontSize:12, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{selectedProfile.nowPlaying.track}</div>
+                        <div style={{fontSize:11, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{selectedProfile.nowPlaying.artist}{selectedProfile.nowPlaying.genre?` • ${selectedProfile.nowPlaying.genre}`:""}</div>
+                      </div>
+                      {selectedProfile.nowPlaying.previewUrl && <audio src={selectedProfile.nowPlaying.previewUrl} controls preload="none" style={{height:28, width:100}}/>}
+                    </div>
+                  )}
                   {selectedProfile.bio ? <div style={{marginTop:10, border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, fontSize:12, lineHeight:1.6, whiteSpace:"pre-wrap"}}><RenderContent text={selectedProfile.bio}/></div> : <div style={{marginTop:10, fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", border:"1px dashed var(--border)", padding:8, textAlign:"center"}}>bio yok</div>}
                   {(()=>{ const cn=selectedProfile.connections||{}; const items=[
                     cn.github ? {k:"GITHUB", href: cn.github.startsWith("http")?cn.github:`https://github.com/${cn.github.replace(/^@/,"")}`} : null,
