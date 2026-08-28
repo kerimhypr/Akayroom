@@ -1,5 +1,7 @@
 # AKAYROOM
 
+> **[🌐 Live site →](https://akayroom-frontend.onrender.com/)**
+
 Koyu temalı, gerçek zamanlı topluluk iletişim uygulaması. Next.js 15, Firebase Auth + Realtime Database ve WebRTC mesh sinyalleşmesi ile kuruludur. Metin, sesli/görüntülü arama, ekran paylaşımı, DM, sunucu/kanal yönetimi, anlık tepkiler, anket, GitHub/müzik kartları ve komutlar içerir.
 
 ## Teknoloji
