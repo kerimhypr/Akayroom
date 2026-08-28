@@ -1292,7 +1292,7 @@ export default function Home(){
   }
 
   async function searchGifs(){
-    const key=process.env.NEXT_PUBLIC_GIPHY_API_KEY;
+    const key=process.env.NEXT_PUBLIC_GIPHY_API_KEY || "R8c1dYdCtzP7qoeRcFqk7hCjex1lNSYZ";
     if(!key || !gifSearch.trim()){ setGifResults([]); setToast("Giphy anahtarı yok"); return; }
     try{
       const res=await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(gifSearch)}&limit=6`);
