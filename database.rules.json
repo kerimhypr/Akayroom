@@ -224,12 +224,13 @@
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         "$inviteId": {
-          ".write": "auth != null && newData.child('fromUid').val() === auth.uid",
+          ".write": "auth != null && (auth.uid === $uid || (newData.exists() && newData.child('fromUid').val() === auth.uid) || (data.exists() && data.child('fromUid').val() === auth.uid))",
           ".validate": "newData.hasChildren(['serverId', 'serverName', 'fromUid', 'fromName', 'createdAt'])"
         }
       }
     },
     "dmThreads": {
+      ".read": "auth != null",
       "$threadId": {
         ".read": "auth != null && data.child('participants').child(auth.uid).exists()",
         ".write": "auth != null && newData.child('participants').child(auth.uid).exists()",
