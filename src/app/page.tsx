@@ -2008,12 +2008,12 @@ export default function Home(){
           <>
             <div className="server-title">
               {isDemo ? <strong>AKAYROOM</strong> : <strong>{selectedServerData?.name}</strong>}
-              {!isDemo && (
+              {!isDemo && (()=>{ const myRole=members.find(m=>m.uid===user?.uid)?.role; const canManage=myRole==="owner"||myRole==="admin"; return (
                 <div style={{display:"flex", gap:6}}>
                   <button onClick={()=>setShowMembers(v=>!v)} title="Üyeler" style={{width:26,height:26,border:"1px solid var(--border)",background: showMembers?"#fff":"transparent",color: showMembers?"#000":"var(--muted)",display:"grid",placeItems:"center"}}>◫</button>
-                  <button onClick={()=>setShowServerSettings(true)} title="Ayarlar" style={{width:26,height:26,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",display:"grid",placeItems:"center"}}>⚙</button>
+                  {canManage && <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları" style={{width:26,height:26,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",display:"grid",placeItems:"center"}}>⚙</button>}
                 </div>
-              )}
+              );})()}
             </div>
 
             {isDemo ? (
@@ -3315,31 +3315,50 @@ export default function Home(){
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-head"><span>SUNUCU — {selectedServerData?.name}</span><button onClick={()=>setShowServerSettings(false)}>✕</button></div>
             <div className="modal-body">
-              <div className="icon-upload">
-                {selectedServerData?.iconUrl ? <img src={selectedServerData.iconUrl} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
-                <label className="icon-upload-btn">FOTOĞRAF<input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ update(ref(db,`servers/${selectedServer}`),{iconUrl:String(r.result)}).catch(()=>{}); setToast("güncellendi"); }; r.readAsDataURL(f);}} /></label>
-              </div>
-              <label>SUNUCU ADI</label>
-              <input defaultValue={selectedServerData?.name} onBlur={e=>{
-                if(!e.target.value.trim()) return;
-                update(ref(db,`servers/${selectedServer}`),{name:e.target.value.trim()}); setToast("güncellendi");
-              }} />
-              <div style={{marginTop:14, display:"flex", gap:6}}>
-                <button className="btn btn-primary" onClick={()=>{ setShowServerSettings(false); setShowServerInviteMenu(true); }}>DAVET ET</button>
-                <button className="btn btn-danger" onClick={()=>{
-                  if(confirm("silinsin mi?")){
-                    remove(ref(db,`servers/${selectedServer}`)).catch(()=>{});
-                    remove(ref(db,`serverMembers/${selectedServer}`)).catch(()=>{});
-                    remove(ref(db,`channels/${selectedServer}`)).catch(()=>{});
-                    remove(ref(db,`categories/${selectedServer}`)).catch(()=>{});
-                    remove(ref(db,`attachments/${selectedServer}`)).catch(()=>{});
-                    if(joinedVoice) void hangUpVoice();
-                    setSelectedServer("demo");
-                    setSelectedChannel("general");
-                    setToast("silindi"); setShowServerSettings(false);
-                  }
-                }}>SUNUCUYU SİL</button>
-              </div>
+              {(()=>{ const myRole=members.find(m=>m.uid===user?.uid)?.role; const canManage=myRole==="owner"||myRole==="admin"; const isOwner=myRole==="owner"; return (
+                <>
+                  {canManage && (
+                    <>
+                      <div className="icon-upload">
+                        {selectedServerData?.iconUrl ? <img src={selectedServerData.iconUrl} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
+                        <label className="icon-upload-btn">FOTOĞRAF<input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ update(ref(db,`servers/${selectedServer}`),{iconUrl:String(r.result)}).catch(()=>{}); setToast("güncellendi"); }; r.readAsDataURL(f);}} /></label>
+                      </div>
+                      <label>SUNUCU ADI</label>
+                      <input defaultValue={selectedServerData?.name} onBlur={e=>{
+                        if(!e.target.value.trim()) return;
+                        update(ref(db,`servers/${selectedServer}`),{name:e.target.value.trim()}); setToast("güncellendi");
+                      }} />
+                    </>
+                  )}
+                  {!canManage && (
+                    <div style={{border:"1px solid var(--border)", padding:10, background:"var(--surface-2)", display:"flex", gap:10, alignItems:"center"}}>
+                      {selectedServerData?.iconUrl ? <img src={selectedServerData.iconUrl} alt="" style={{width:40, height:40, border:"1px solid var(--border)"}}/> : <span style={{width:40, height:40, display:"grid", placeItems:"center", border:"1px solid var(--border)", background:"#000"}}><span className="icon"><Icon name="grid" size={16}/></span></span>}
+                      <div>
+                        <div style={{fontWeight:700}}>{selectedServerData?.name}</div>
+                        <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>ID: {selectedServer} • {members.length} üye</div>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{marginTop:14, display:"flex", gap:6}}>
+                    <button className="btn btn-primary" onClick={()=>{ setShowServerSettings(false); setShowServerInviteMenu(true); }}>DAVET ET</button>
+                    {isOwner && (
+                      <button className="btn btn-danger" onClick={()=>{
+                        if(confirm("silinsin mi?")){
+                          remove(ref(db,`servers/${selectedServer}`)).catch(()=>{});
+                          remove(ref(db,`serverMembers/${selectedServer}`)).catch(()=>{});
+                          remove(ref(db,`channels/${selectedServer}`)).catch(()=>{});
+                          remove(ref(db,`categories/${selectedServer}`)).catch(()=>{});
+                          remove(ref(db,`attachments/${selectedServer}`)).catch(()=>{});
+                          if(joinedVoice) void hangUpVoice();
+                          setSelectedServer("demo");
+                          setSelectedChannel("general");
+                          setToast("silindi"); setShowServerSettings(false);
+                        }
+                      }}>SUNUCUYU SİL</button>
+                    )}
+                  </div>
+                </>
+              );})()}
               <div style={{marginTop:16, border:"1px solid var(--border)", padding:10, background:"var(--surface-2)"}}>
                 <div style={{fontFamily:"var(--font-mono)", fontSize:11, fontWeight:700}}>ROLLER — {members.length} üye</div>
                 {(()=> {
