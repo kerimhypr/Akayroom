@@ -2052,7 +2052,7 @@ export default function Home(){
               {!isDemo && (()=>{ const myRole=members.find(m=>m.uid===user?.uid)?.role; const canManage=myRole==="owner"||myRole==="admin"; return (
                 <div style={{display:"flex", gap:6}}>
                   <button onClick={()=>setShowMembers(v=>!v)} title="Üyeler" style={{width:26,height:26,border:"1px solid var(--border)",background: showMembers?"var(--accent)":"transparent",color: showMembers?"var(--accent-fg)":"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)"}}><span className="icon"><Icon name="users" size={13}/></span></button>
-                  {canManage && <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları" style={{width:26,height:26,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)"}}><span className="icon"><Icon name="settings" size={13}/></span></button>}
+                  {canManage && <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları" style={{width:26,height:26,border:"1px solid var(--border)",background: showServerSettings?"var(--accent)":"transparent",color: showServerSettings?"var(--accent-fg)":"var(--muted)",display:"grid",placeItems:"center",borderRadius:"var(--r-sm)",transition:"all .2s var(--ease)"}}><span className="icon"><Icon name="settings" size={13}/></span></button>}
                 </div>
               );})()}
             </div>
@@ -2092,8 +2092,8 @@ export default function Home(){
                               {ch.type==="voice" && <span style={{fontSize:10, opacity:.5}}>●</span>}
                               {(()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; return ok ? (
                               <span style={{marginLeft:"auto", display:"flex", gap:2, opacity:0}} className="ch-actions-hover">
-                                <span onClick={e=>{e.stopPropagation(); setEditingChannel(ch); setEditChannelName(ch.name); setEditChannelTopic(ch.topic||"");}} style={{border:"1px solid var(--border)", width:18, height:18, display:"grid", placeItems:"center"}} title="Düzenle"><span className="icon"><Icon name="edit" size={10}/></span></span>
-                                <span onClick={e=>{e.stopPropagation(); deleteChannel(ch.id);}} style={{border:"1px solid var(--border)", width:18, height:18, display:"grid", placeItems:"center"}} title="Sil"><span className="icon"><Icon name="trash" size={10}/></span></span>
+                                <span onClick={e=>{e.stopPropagation(); setEditingChannel(ch); setEditChannelName(ch.name); setEditChannelTopic(ch.topic||"");}} style={{border:"1px solid var(--border)", width:20, height:20, display:"grid", placeItems:"center", borderRadius:"var(--r-xs)", background:"var(--bg)"}} title="Düzenle"><Icon name="edit" size={10}/></span>
+                                <span onClick={e=>{e.stopPropagation(); deleteChannel(ch.id);}} style={{border:"1px solid var(--border)", width:20, height:20, display:"grid", placeItems:"center", borderRadius:"var(--r-xs)", background:"var(--bg)"}} title="Sil"><Icon name="trash" size={10}/></span>
                               </span>
                               ) : null;})()}
                             </button>
@@ -2529,7 +2529,7 @@ export default function Home(){
                 {(()=>{ const r=members.find(m=>m.uid===user?.uid)?.role; const ok=r==="owner"||r==="admin"; if(!ok) return null; return (<>
                   <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo"){ setEditingChannel(selectedChannelData); setEditChannelName(selectedChannelData.name); setEditChannelTopic(selectedChannelData.topic||""); } }} title="Kanalı Düzenle"><span className="icon"><Icon name="edit" size={12}/></span></button>
                   <button onClick={()=>{ if(selectedChannelData && selectedServer!=="demo") deleteChannel(selectedChannelData.id); }} title="Kanalı Sil" style={{color:"var(--danger)"}}><span className="icon"><Icon name="trash" size={12}/></span></button>
-                  <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları"><span className="icon"><Icon name="settings" size={12}/></span></button>
+                  <button onClick={()=>setShowServerSettings(true)} title="Sunucu Ayarları" style={showServerSettings ? {background:"var(--accent)", color:"var(--accent-fg)", borderColor:"var(--accent-border)"} : undefined}><span className="icon"><Icon name="settings" size={12}/></span></button>
                 </>);})()}
                 <button onClick={()=>setShowPalette(true)} title="Komut paleti (Ctrl+K)" className="h-icon"><span style={{fontFamily:"var(--font-mono)",fontSize:11,fontWeight:700,letterSpacing:".04em"}}>⌘K</span></button>
               </div>
