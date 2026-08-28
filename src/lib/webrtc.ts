@@ -19,11 +19,29 @@ export const rtcIceServers: RTCIceServer[] = [
 // A serverId is only recorded for server voice channels; null for DM calls.
 
 export function joinSignalRoom(room: string, serverId: string | null, uid: string) {
-  if (serverId) void set(ref(db, `${room}/serverId`), serverId);
   const participant = ref(db, `${room}/participants/${uid}`);
-  void set(participant, { joinedAt: Date.now() });
-  void onDisconnect(participant).remove();
-  return () => void remove(participant);
+  let cancelled = false;
+  void (async () => {
+    try {
+      // The participant rule reads room/serverId. The old implementation fired
+      // both writes concurrently, so the participant write could race the
+      // serverId write and be rejected intermittently.
+      if (serverId) await set(ref(db, `${room}/serverId`), serverId);
+      if (cancelled) return;
+      await set(participant, { joinedAt: Date.now() });
+      if (cancelled) {
+        await remove(participant).catch(() => {});
+        return;
+      }
+      await onDisconnect(participant).remove();
+    } catch {
+      // The caller's listeners will surface the failed/empty room state.
+    }
+  })();
+  return () => {
+    cancelled = true;
+    void remove(participant);
+  };
 }
 
 export function listenForParticipants(
@@ -51,7 +69,6 @@ export function listenForCandidates(room: string, fromUid: string, toUid: string
 
 export function publishCandidate(room: string, fromUid: string, toUid: string, candidate: RTCIceCandidate) {
   const candidateRef = push(ref(db, `${room}/candidates/${fromUid}/${toUid}`));
-  // ts: eski oturumlardan kalan candidate'ların dinleyicide yok sayılması için
   return set(candidateRef, { ...candidate.toJSON(), ts: Date.now() });
 }
 
