@@ -1,0 +1,122 @@
+/* Color Tokens */
+:root {
+  /* Surfaces */
+  --surface-0: #05060a;
+  --surface-1: #0b0d14;
+  --surface-2: #11131c;
+  --surface-3: #1a1d2e;
+  --surface-hover: #22232e;
+  
+  /* Text */
+  --text-primary: #f3f4fa;
+  --text-secondary: #a8aab9;
+  --text-tertiary: #7f8496;
+  --text-disabled: #5a5d6d;
+  
+  /* Borders */
+  --border-default: #1e2231;
+  --border-light: #262b3c;
+  --border-strong: #3a3f52;
+  
+  /* Accents */
+  --accent-purple: #8b5cf6;
+  --accent-purple-hover: #a78bfa;
+  --accent-purple-active: #7c3aed;
+  --accent-blue: #3b82f6;
+  --accent-blue-hover: #60a5fa;
+  
+  /* Status */
+  --status-online: #10b981;
+  --status-idle: #f59e0b;
+  --status-dnd: #ef4444;
+  --status-offline: #6b7280;
+  
+  /* Semantic */
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --success: #10b981;
+  --info: #3b82f6;
+  
+  /* Typography */
+  --font-family-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-family-mono: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+  
+  /* Spacing */
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  
+  /* Sizes */
+  --size-touch-target: 2.75rem;
+  --size-icon-sm: 1.25rem;
+  --size-icon-md: 1.5rem;
+  --size-icon-lg: 2rem;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease-out;
+  --transition-base: 200ms ease-out;
+  --transition-slow: 300ms ease-out;
+  
+  /* Z-index */
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-fixed: 30;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+  --z-tooltip: 60;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0ms;
+    --transition-base: 0ms;
+    --transition-slow: 0ms;
+  }
+}
+
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #__next {
+  width: 100%;
+  height: 100%;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  overflow: hidden;
+}
