@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AKAYROOM — operator comms",
-  description: "Minimal brutalist comms — text, voice, presence. Single-operator, monochrome, terminal-grade.",
+  description: "Modern comms — metin, ses, canlılık. Ekipler için hızlı, sessiz ve şık operasyon merkezi.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
