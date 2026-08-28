@@ -3540,7 +3540,7 @@ export default function Home(){
           </div>
         ) : (
           <div className="call-overlay">
-            <div className="call-window">
+            <div className="call-window" style={screenSharing || Object.values(remoteCamStatus).includes("screen") ? {maxWidth:760, width:"min(760px, 96vw)"} : undefined}>
               <div className="call-head">
                 <div>
                   <div className="call-title">● {callTitle}</div>
@@ -3550,14 +3550,14 @@ export default function Home(){
               </div>
               <div className="call-grid">
                 {(()=>{
-                  // Find an active video source to feature large on stage
+                  // Find an active video source to feature large on stage — screen sharing öncelikli
                   const remoteCamUid = Object.keys(voiceParticipants).find(uid=> remoteCamStatus[uid] && remoteStreams[uid]);
-                  const featured = remoteCamUid ? {uid:remoteCamUid, info:voiceParticipants[remoteCamUid], kind:remoteCamStatus[remoteCamUid]} : (camOn && camStreamRef.current ? {uid:user.uid, info:null, kind:"on" as const} : null);
+                  const featured = remoteCamUid ? {uid:remoteCamUid, info:voiceParticipants[remoteCamUid], kind:remoteCamStatus[remoteCamUid]} : (screenSharing && screenStreamRef.current ? {uid:user.uid, info:null, kind:"screen" as const} : (camOn && camStreamRef.current ? {uid:user.uid, info:null, kind:"on" as const} : null));
                   if(featured){
-                    const videoStream = featured.uid===user.uid ? camStreamRef.current : remoteStreams[featured.uid];
+                    const videoStream = featured.uid===user.uid ? (featured.kind==="screen" ? screenStreamRef.current : camStreamRef.current) : remoteStreams[featured.uid];
                     return (
                       <div className="call-stage">
-                        <video className="call-stage-video" muted autoPlay playsInline ref={el=>{ if(el && videoStream){ el.muted = true; el.srcObject = videoStream; void el.play().catch(()=>{}); } }} />
+                        <video className="call-stage-video" muted autoPlay playsInline style={featured.kind==="screen" ? {height:"min(70vh, 560px)"} : undefined} ref={el=>{ if(el && videoStream){ el.muted = true; el.srcObject = videoStream; void el.play().catch(()=>{}); } }} />
                         <div className="call-stage-bar">
                           <span className="call-stage-name">● {featured.kind==="screen" ? "EKRAN PAYLAŞIMI" : featured.uid===user.uid ? "Sen — kamera" : (featured.info?.profile?.displayName || featured.info?.profile?.username || "Kamera")}</span>
                           <span style={{marginLeft:"auto", display:"flex", gap:6}}>
@@ -3582,7 +3582,7 @@ export default function Home(){
                     <>
                 <div className={`call-card ${micMuted?"muted":""}`}>
                   <div className="call-video-box">
-                    {camOn && camStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && camStreamRef.current){ el.muted = true; el.srcObject = camStreamRef.current; void el.play().catch(()=>{}); } }}/> : <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>}
+                    {screenSharing && screenStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && screenStreamRef.current){ el.muted = true; el.srcObject = screenStreamRef.current; void el.play().catch(()=>{}); } }}/> : camOn && camStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && camStreamRef.current){ el.muted = true; el.srcObject = camStreamRef.current; void el.play().catch(()=>{}); } }}/> : <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>}
                   </div>
                   <div className="call-name">Sen {screenSharing ? "— ekran paylaşımı" : ""}</div>
                   <div className="call-status"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={11}/></span> {micMuted ? "sessiz" : "konuşuyor"}</div>
