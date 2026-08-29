@@ -1930,7 +1930,7 @@ export default function Home(){
         <div style={{flex:1}}/>
         <button onClick={()=>setActiveView("profile")} style={{width:44, height:44, border:"1px solid var(--border)", background: (activeView as any)==="profile" ? "var(--accent)" : "var(--surface-3)", color: (activeView as any)==="profile" ? "var(--accent-fg)" : "var(--text)", display:"grid", placeItems:"center", overflow:"visible", flex:"0 0 auto", position:"relative", borderRadius:"50%", transition:"all .2s var(--ease)"}} title="Profil">
           <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
-          {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
+          {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
         </button>
       </aside>
 
@@ -2049,7 +2049,7 @@ export default function Home(){
                 <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:6}}>PROFİL FOTOĞRAFI</div>
                 <div style={{width:64, height:64, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", marginBottom:8, position:"relative", borderRadius:"50%"}}>
                   <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}</div>
-                  {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none"}}/>}
+                  {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
                 </div>
                 <label style={{display:"block", border:"1px dashed var(--border)", padding:"8px", textAlign:"center", cursor:"pointer", fontFamily:"var(--font-mono)", fontSize:11}}>
                   FOTOĞRAF SEÇ
@@ -2239,7 +2239,7 @@ export default function Home(){
                         <div style={{width:76, height:76, border:"2px solid var(--accent)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)", position:"relative", zIndex:2}}>
                           <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800, fontSize:20}}>{initials(profile?.displayName ?? username)}</span>}</div>
                           {/* decoration - image or border */}
-                          {profile?.decoration && (profile.decoration.startsWith("http") ? <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/> : <div style={{position:"absolute", inset:-2, border:"2px solid var(--accent)", borderRadius: profile.decoration==="circle" ? "50%" : "0", pointerEvents:"none"}}/>)}
+                          {profile?.decoration && (profile.decoration.startsWith("http") ? <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/> : <div style={{position:"absolute", inset:-2, border:"2px solid var(--accent)", borderRadius: profile.decoration==="circle" ? "50%" : "0", pointerEvents:"none"}}/>)}
                           <div style={{position:"absolute", right:0, bottom:0, width:14, height:14, border:"2px solid var(--surface)", background: profile?.status==="online" ? "var(--online)" : profile?.status==="idle" ? "var(--idle)" : profile?.status==="dnd" ? "var(--dnd)" : "var(--offline)", borderRadius:"50%", boxShadow:"0 1px 2px rgba(0,0,0,.3)"}}/>
                         </div>
                         <div style={{marginBottom:4, display:"flex", gap:4, flexWrap:"wrap"}}>
@@ -2982,9 +2982,9 @@ export default function Home(){
             <div className="modal-body" style={{maxHeight:"68vh", overflow:"auto", padding:14}}>
               <div style={{display:"flex", flexDirection:"column", gap:14}}>
                 <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, display:"flex", gap:10, alignItems:"center"}}>
-                  <div style={{width:48, height:48, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", flex:"0 0 auto"}}>
-                    {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}
-                    {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none"}}/>}
+                  <div style={{width:48, height:48, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", position:"relative", flex:"0 0 auto", borderRadius:"50%"}}>
+                    <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}</div>
+                    {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
                     {profile?.decoration && !profile.decoration.startsWith("http") && <div style={{position:"absolute", inset:-2, border:"2px solid var(--accent)", borderRadius: profile.decoration==="circle" ? "50%" : "0"}}/>}
                   </div>
                   <div style={{flex:1, minWidth:0}}>
