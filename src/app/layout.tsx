@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./mobile.css";
+import "./production-fixes.css";
 import ClientOnly from "@/components/ClientOnly";
 import MobileMenuBridge from "@/components/MobileMenuBridge";
 
@@ -21,6 +22,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#05060a",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
