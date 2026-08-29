@@ -37,7 +37,8 @@ export async function uploadAttachment(path: string, dataUrl: string, mime: stri
   return downloadTokens;
 }
 
-export function storageDownloadUrl(path: string, token: string): string {
+export function storageDownloadUrl(path: string | undefined, token: string | undefined): string {
+  if (!path || !token) return "#";
   return `${STORAGE_BASE}/${encodeURIComponent(path)}?alt=media&token=${encodeURIComponent(token)}`;
 }
 
