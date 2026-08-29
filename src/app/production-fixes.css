@@ -1,0 +1,59 @@
+/* Production hardening: layout, overflow, touch, dialogs, media and mobile viewport fixes. */
+html { overflow-x: hidden; }
+body { overflow-x: hidden; min-width: 0; }
+.app-shell, .auth-screen, .loading-screen { width: 100%; max-width: 100%; }
+img, video, canvas, iframe { max-width: 100%; }
+button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+
+/* Prevent long user-generated values from blowing up flex/grid layouts. */
+.message-row, .message-body, .msg-body, .msg-content, .friend-row, .dm-item, .member-row,
+.channel-row, .github-card, .music-card, .poll, .modal, .modal-body, .page-panel { min-width: 0; }
+.msg-content, .message-content, .msg-author, .friend-name, .dm-name { overflow-wrap: anywhere; word-break: break-word; }
+
+/* Keep overlays inside the viewport and make them usable on short screens. */
+.modal-backdrop, .mobile-menu-backdrop, .context-menu, .lightbox-backdrop {
+  overscroll-behavior: contain;
+}
+.modal-backdrop { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
+.modal { max-height: calc(100dvh - 20px); overflow: auto; -webkit-overflow-scrolling: touch; }
+
+/* Media should never create horizontal page overflow. */
+.msg-content img, .msg-content video, .msg-content audio,
+.github-card, .music-card, .poll, .attachment-card { max-width: 100%; }
+.msg-content video { display: block; height: auto; }
+
+/* Respect devices with a home indicator and notches. */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .auth-screen { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+}
+
+/* Touch devices: remove hover-only movement that causes accidental layout shifts. */
+@media (hover: none) and (pointer: coarse) {
+  .server-icon:hover, .channel-row:hover, .dm-item:hover, .member-row:hover,
+  .header-actions button:hover, .cu-actions button:hover, .msg-actions button:hover,
+  .btn:hover, .tab:hover, .context-item:hover, .friend-mini-btn:hover { transform: none; }
+}
+
+/* Narrow phones: preserve the chat column instead of allowing action bars to push it wider. */
+@media (max-width: 420px) {
+  .auth-screen { padding: 12px; }
+  .auth-card { padding: 24px 16px 18px; }
+  .auth-card input { min-height: 42px; }
+  .primary-button, .btn { min-height: 40px; }
+  .message-row { max-width: 100%; }
+  .msg-content { max-width: 100%; }
+  .github-card, .music-card, .poll { overflow: hidden; }
+}
+
+/* Mobile keyboard: use the visual viewport when the browser supports it. */
+@media (max-width: 760px) {
+  .chat-panel { min-height: 100dvh; }
+  .message-area { min-height: 0; overscroll-behavior-y: contain; }
+  .composer-wrap { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  textarea.composer-input { resize: none; overflow-y: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto !important; }
+}
