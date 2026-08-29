@@ -338,7 +338,8 @@ export default function Home(){
     if(activeView!=="server") return;
     if(!selectedChannel) return;
     const ch = channels.find(c=>c.id===selectedChannel);
-    if(ch?.type==="voice") { setMessages([]); return; }
+    // voice kanalda mesaj yok - selectedChannel değişince sadece bu durumda tetiklenmeli, channels array her güncellenince değil
+    if(ch?.type==="voice" || selectedChannelData?.type==="voice") { setMessages([]); return; }
     oldestTsRef.current = Infinity;
     hasMoreRef.current = true;
     loadedIdsRef.current = new Set();
@@ -372,7 +373,8 @@ export default function Home(){
       if((m.createdAt||0) < oldestTsRef.current) oldestTsRef.current = m.createdAt||0;
     });
     return ()=>{ cancelled=true; try{u();}catch{} };
-  },[user,selectedServer,selectedChannel,channels,activeView]);
+  // channels array her değiştiğinde yeniden abone olmamak için selectedChannelData.type'ye bak, hantallık fix
+  },[user,selectedServer,selectedChannel,selectedChannelData?.type,activeView]);
 
   const loadOlder = async ()=>{
     if(!user || selectedServer==="demo" || !selectedChannel) return;
@@ -1929,8 +1931,8 @@ export default function Home(){
         <div className="rail-divider" style={{marginTop:8}}/>
         <div style={{flex:1}}/>
         <button onClick={()=>setActiveView("profile")} style={{width:44, height:44, border:"1px solid var(--border)", background: (activeView as any)==="profile" ? "var(--accent)" : "var(--surface-3)", color: (activeView as any)==="profile" ? "var(--accent-fg)" : "var(--text)", display:"grid", placeItems:"center", overflow:"visible", flex:"0 0 auto", position:"relative", borderRadius:"50%", transition:"all .2s var(--ease)"}} title="Profil">
-          <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
-          {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
+          <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img loading="eager" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
+          {profile?.decoration && profile.decoration.startsWith("http") && <img loading="lazy" decoding="async" src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
         </button>
       </aside>
 
@@ -1947,7 +1949,7 @@ export default function Home(){
               )}
               {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(s=>(
                 <div key={s.id} className={`dm-item ${selectedServer===s.id ? "active": ""}`} onClick={()=>{setSelectedServer(s.id); setActiveView("server"); setMobileSidebarOpen(false);}}>
-                  <button className="dm-av" style={{cursor:"pointer", overflow:"hidden"}}>{s.iconUrl ? <img src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span className="server-hub-initial">{initials(s.name)}</span>}</button>
+                  <button className="dm-av" style={{cursor:"pointer", overflow:"hidden"}}>{s.iconUrl ? <img loading="lazy" decoding="async" src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span className="server-hub-initial">{initials(s.name)}</span>}</button>
                   <div className="dm-meta"><div className="dm-name" style={{textAlign:"left"}}>{s.name}</div><div className="dm-sub">{s.memberCount ?? ""}</div></div>
                   <span style={{marginLeft:"auto"}}>{serverUnread(s.id) > 0 && <span className="unread-badge">{serverUnread(s.id)}</span>}</span>
                 </div>
@@ -2023,7 +2025,7 @@ export default function Home(){
                   </div>
                 );})()}
                 <div className="current-user">
-                  <button className="cu-avatar" onClick={()=>openProfile(user.uid)} style={{cursor:"pointer"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</button>
+                  <button className="cu-avatar" onClick={()=>openProfile(user.uid)} style={{cursor:"pointer"}}>{profile?.avatarUrl ? <img loading="eager" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</button>
                   <div className="cu-meta">
                     <strong>{profile?.displayName ?? username}</strong>
                     <small>@{profile?.username ?? username}</small>
@@ -2048,8 +2050,8 @@ export default function Home(){
               <div style={{marginTop:16, border:"1px solid var(--border)", padding:10, background:"var(--surface-2)"}}>
                 <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginBottom:6}}>PROFİL FOTOĞRAFI</div>
                 <div style={{width:64, height:64, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", marginBottom:8, position:"relative", borderRadius:"50%"}}>
-                  <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}</div>
-                  {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
+                  <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img loading="lazy" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}</div>
+                  {profile?.decoration && profile.decoration.startsWith("http") && <img loading="lazy" decoding="async" src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
                 </div>
                 <label style={{display:"block", border:"1px dashed var(--border)", padding:"8px", textAlign:"center", cursor:"pointer", fontFamily:"var(--font-mono)", fontSize:11}}>
                   FOTOĞRAF SEÇ
@@ -2059,7 +2061,7 @@ export default function Home(){
               </div>
             </div>
             <div className="current-user">
-              <div className="cu-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
+              <div className="cu-avatar">{profile?.avatarUrl ? <img loading="eager" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(profile?.displayName ?? username)}</div>
               <div className="cu-meta"><strong>{profile?.displayName ?? username}</strong><small>@{profile?.username ?? username}</small></div>
               <div className="cu-actions"><button onClick={()=>setShowAccountSettings(true)} title="Kullanıcı Ayarları"><span className="icon"><Icon name="settings"/></span></button></div>
             </div>
@@ -2078,7 +2080,7 @@ export default function Home(){
                   <div style={{border:"1px dashed var(--border)", padding:12, margin:"8px 0", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center"}}>henüz DM yok</div>
                 ) : dmThreads.map(th=>(
                   <div key={th.id} className={`dm-item ${selectedDm===th.id ? "active": ""}`} onClick={()=>{setSelectedDm(th.id); setActiveView("dms");}}>
-                    <button className="dm-av" onClick={(e)=>{e.stopPropagation(); openProfile(th.otherUid);}} style={{cursor:"pointer"}}>{th.profile?.avatarUrl ? <img src={th.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(th.profile?.displayName||th.profile?.username||"??")}</button>
+                    <button className="dm-av" onClick={(e)=>{e.stopPropagation(); openProfile(th.otherUid);}} style={{cursor:"pointer"}}>{th.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={th.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(th.profile?.displayName||th.profile?.username||"??")}</button>
                     <div className="dm-meta"><div className="dm-name">{th.profile?.displayName||th.profile?.username}</div><div className="dm-sub">@{th.profile?.username}</div></div>
                     <span style={{marginLeft:"auto"}}>{dmUnread(th.id) > 0 && <span className="unread-badge">{dmUnread(th.id)}</span>}</span>
                   </div>
@@ -2151,7 +2153,7 @@ export default function Home(){
                     </div>
                   ) : friends.map(f=>(
                     <div key={f.uid} className="friend-row" style={{cursor:"pointer"}} onClick={()=>openProfile(f.uid)}>
-                      <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                      <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
                       <div style={{flex:1, minWidth:0}}>
                         <div data-friend-name style={{fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
@@ -2174,7 +2176,7 @@ export default function Home(){
                 <div style={{border:"1px dashed var(--border)", padding:12, margin:"8px 0", fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", textAlign:"center"}}>henüz DM yok</div>
               ) : dmThreads.map(th=>(
                 <div key={th.id} className={`dm-item ${selectedDm===th.id ? "active": ""}`} onClick={()=>{setSelectedDm(th.id); setMobileSidebarOpen(false);}}>
-                  <button className="dm-av" onClick={(e)=>{e.stopPropagation(); openProfile(th.otherUid);}} style={{cursor:"pointer"}}>{th.profile?.avatarUrl ? <img src={th.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(th.profile?.displayName||th.profile?.username||"??")}</button>
+                  <button className="dm-av" onClick={(e)=>{e.stopPropagation(); openProfile(th.otherUid);}} style={{cursor:"pointer"}}>{th.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={th.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(th.profile?.displayName||th.profile?.username||"??")}</button>
                   <div className="dm-meta"><div className="dm-name">{th.profile?.displayName||th.profile?.username}</div><div className="dm-sub">@{th.profile?.username}</div></div>
                 </div>
               ))}
@@ -2200,7 +2202,7 @@ export default function Home(){
                 <div style={{display:"flex", flexDirection:"column", gap:8}}>
                   {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(s=>(
                     <div key={s.id} className="server-portfolio-card" onClick={()=>{setSelectedServer(s.id); setActiveView("server"); setMobileSidebarOpen(false);}}>
-                      <div className="spc-icon">{s.iconUrl ? <img src={s.iconUrl} alt=""/> : initials(s.name)}</div>
+                      <div className="spc-icon">{s.iconUrl ? <img loading="lazy" decoding="async" src={s.iconUrl} alt=""/> : initials(s.name)}</div>
                       <div style={{flex:1, minWidth:0}}>
                         <div style={{fontWeight:700, fontSize:14}}>{s.name}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>{s.description || "sohbet etmeye hazır"}</div>
@@ -2237,9 +2239,9 @@ export default function Home(){
                       </div>
                       <div style={{position:"absolute", left:16, bottom:-30, display:"flex", alignItems:"flex-end", gap:10}}>
                         <div style={{width:76, height:76, border:"2px solid var(--accent)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)", position:"relative", zIndex:2}}>
-                          <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800, fontSize:20}}>{initials(profile?.displayName ?? username)}</span>}</div>
+                          <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img loading="lazy" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800, fontSize:20}}>{initials(profile?.displayName ?? username)}</span>}</div>
                           {/* decoration - image or border */}
-                          {profile?.decoration && (profile.decoration.startsWith("http") ? <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/> : <div style={{position:"absolute", inset:-2, border:"2px solid var(--accent)", borderRadius: profile.decoration==="circle" ? "50%" : "0", pointerEvents:"none"}}/>)}
+                          {profile?.decoration && (profile.decoration.startsWith("http") ? <img loading="lazy" decoding="async" src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/> : <div style={{position:"absolute", inset:-2, border:"2px solid var(--accent)", borderRadius: profile.decoration==="circle" ? "50%" : "0", pointerEvents:"none"}}/>)}
                           <div style={{position:"absolute", right:0, bottom:0, width:14, height:14, border:"2px solid var(--surface)", background: profile?.status==="online" ? "var(--online)" : profile?.status==="idle" ? "var(--idle)" : profile?.status==="dnd" ? "var(--dnd)" : "var(--offline)", borderRadius:"50%", boxShadow:"0 1px 2px rgba(0,0,0,.3)"}}/>
                         </div>
                         <div style={{marginBottom:4, display:"flex", gap:4, flexWrap:"wrap"}}>
@@ -2351,8 +2353,8 @@ export default function Home(){
                     ) : null}
                     {dmMsgs.map(m=>(
                   <div key={m.id} id={`dm-msg-${m.id}`} className={`message-row ${dmHighlightId===m.id ? "msg-flash" : ""}`} style={{maxWidth:760, margin:"0 auto", width:"100%"}}>
-                    <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorId===user.uid ? (profile?.displayName||username) : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"??"))}</button>
-                    <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)} {m.editedAt?"(düzenlendi)":""}</span></div>{dmEditingId===m.id ? <div style={{display:"flex",gap:6}}><input value={dmEditContent} onChange={e=>setDmEditContent(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void saveDMEdit();if(e.key==="Escape")setDmEditingId(null)}} autoFocus style={{flex:1,background:"var(--bg)",border:"1px solid var(--accent)",color:"var(--text)",padding:6}}/><button className="btn btn-primary" onClick={()=>void saveDMEdit()}>KAYDET</button><button className="btn" onClick={()=>setDmEditingId(null)}>İPTAL</button></div> : <><div className="msg-content">{m.content}</div>{m.attachment && (()=>{const c=dmAttachmentCache[m.id]; return c?.dataUrl ? (m.attachment.type==="image" ? <img src={c.dataUrl} alt={m.attachment.name} style={{marginTop:6,maxWidth:"100%",maxHeight:340,objectFit:"contain",display:"block"}}/> : m.attachment.type==="video" ? <video src={c.dataUrl} controls style={{marginTop:6,maxWidth:"100%",maxHeight:360,display:"block"}}/> : m.attachment.type==="audio" ? <audio src={c.dataUrl} controls style={{marginTop:6,width:"100%"}}/> : <a href={c.dataUrl} download={m.attachment.name} className="btn" style={{display:"inline-block",marginTop:6}}>⎘ {m.attachment.name}</a>) : <button className="btn" style={{marginTop:6}} onClick={()=>loadDmAttachment(m)} disabled={c?.loading}>{c?.loading?"yükleniyor…":<><span className="icon"><Icon name="paperclip" size={11}/></span> {m.attachment.name} ({fmtSize(m.attachment.size)}) — aç</>}</button>;})()}</>} {m.authorId===user.uid && <div className="msg-actions"><button onClick={()=>{setDmEditingId(m.id);setDmEditContent(m.content)}}><span className="icon"><Icon name="edit" size={13}/></span></button><button onClick={()=>void deleteDMMessage(m.id)}><span className="icon"><Icon name="trash" size={13}/></span></button></div>}</div>
+                    <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img loading="lazy" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorId===user.uid ? (profile?.displayName||username) : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"??"))}</button>
+                    <div className="msg-body"><div className="msg-author-row"><span className="msg-author">{m.authorId===user.uid ? "Sen" : (dmThreads.find(d=>d.id===selectedDm)?.profile?.displayName||"arkadaş")}</span><span className="msg-time">{fmtTime(m.createdAt)} {m.editedAt?"(düzenlendi)":""}</span></div>{dmEditingId===m.id ? <div style={{display:"flex",gap:6}}><input value={dmEditContent} onChange={e=>setDmEditContent(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void saveDMEdit();if(e.key==="Escape")setDmEditingId(null)}} autoFocus style={{flex:1,background:"var(--bg)",border:"1px solid var(--accent)",color:"var(--text)",padding:6}}/><button className="btn btn-primary" onClick={()=>void saveDMEdit()}>KAYDET</button><button className="btn" onClick={()=>setDmEditingId(null)}>İPTAL</button></div> : <><div className="msg-content">{m.content}</div>{m.attachment && (()=>{const c=dmAttachmentCache[m.id]; return c?.dataUrl ? (m.attachment.type==="image" ? <img loading="lazy" decoding="async" src={c.dataUrl} alt={m.attachment.name} style={{marginTop:6,maxWidth:"100%",maxHeight:340,objectFit:"contain",display:"block"}}/> : m.attachment.type==="video" ? <video src={c.dataUrl} controls style={{marginTop:6,maxWidth:"100%",maxHeight:360,display:"block"}}/> : m.attachment.type==="audio" ? <audio src={c.dataUrl} controls style={{marginTop:6,width:"100%"}}/> : <a href={c.dataUrl} download={m.attachment.name} className="btn" style={{display:"inline-block",marginTop:6}}>⎘ {m.attachment.name}</a>) : <button className="btn" style={{marginTop:6}} onClick={()=>loadDmAttachment(m)} disabled={c?.loading}>{c?.loading?"yükleniyor…":<><span className="icon"><Icon name="paperclip" size={11}/></span> {m.attachment.name} ({fmtSize(m.attachment.size)}) — aç</>}</button>;})()}</>} {m.authorId===user.uid && <div className="msg-actions"><button onClick={()=>{setDmEditingId(m.id);setDmEditContent(m.content)}}><span className="icon"><Icon name="edit" size={13}/></span></button><button onClick={()=>void deleteDMMessage(m.id)}><span className="icon"><Icon name="trash" size={13}/></span></button></div>}</div>
                   </div>
                     ))}
                   </>
@@ -2386,7 +2388,7 @@ export default function Home(){
                   <div style={{maxWidth:560, margin:"0 auto", width:"100%"}}>
                     {friends.map(f=>(
                       <div key={f.uid} className="friend-row" style={{cursor:"pointer"}} onClick={()=>openProfile(f.uid)}>
-                        <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
+                        <button className="avatar" onClick={(e)=>{e.stopPropagation(); openProfile(f.uid);}} style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</button>
                         <div style={{flex:1, minWidth:0}}>
                           <div data-friend-name style={{fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username}</div>
                           <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
@@ -2512,7 +2514,7 @@ export default function Home(){
                     return (
                       <div key={m.id} data-msg-id={m.id} className={`message-row msg-animate ${isGrouped?"grouped":""}`} onContextMenu={e=>{ e.preventDefault(); setContextMenu({x:e.clientX, y:e.clientY, msg:m});}}>
                         {isGrouped && <div className="group-time">{fmtTime(m.createdAt).slice(0,5)}</div>}
-                        <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorName||"??")}</button>
+                        <button className="msg-avatar" onClick={()=>openProfile(m.authorId)} style={{cursor:"pointer"}}>{m.authorId===user.uid && profile?.avatarUrl ? <img loading="lazy" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.authorName||"??")}</button>
                         <div className="msg-body">
                           {!isGrouped && <div className="msg-author-row"><span className="msg-author">{m.authorName || "anon"}</span><span className="msg-time">{fmtTime(m.createdAt)} {m.editedAt?"(düzenlendi)":""}</span></div>}
                           {m.replyTo && <div className="msg-reply"><strong>{m.replyTo.authorName}</strong> {m.replyTo.content}</div>}
@@ -2529,7 +2531,7 @@ export default function Home(){
                             const meta = m.attachment;
                             if(meta.type==="image"){
                               return c?.dataUrl ? (
-                                <img src={c.dataUrl} alt={meta.name} style={{marginTop:6, maxWidth:"100%", maxHeight:340, border:"1px solid var(--border)", cursor:"zoom-in", display:"block"}} onClick={()=>setLightbox({src:c.dataUrl!, name:meta.name})}/>
+                                <img loading="lazy" decoding="async" src={c.dataUrl} alt={meta.name} style={{marginTop:6, maxWidth:"100%", maxHeight:340, border:"1px solid var(--border)", cursor:"zoom-in", display:"block"}} onClick={()=>setLightbox({src:c.dataUrl!, name:meta.name})}/>
                               ) : (
                                 <button style={{marginTop:6}} className="btn" onClick={()=>loadAttachment(m)} disabled={c?.loading}>{c?.loading ? "yükleniyor…" : `🖼 ${meta.name} (${fmtSize(meta.size)}) — göster`}</button>
                               );
@@ -2585,7 +2587,7 @@ export default function Home(){
                             <a href={m.githubCard.htmlUrl} target="_blank" rel="noopener noreferrer" className="github-card" onClick={e=>e.stopPropagation()}>
                               <div className="github-card-head"><span className="icon"><Icon name="github" size={14}/></span> GITHUB <span style={{marginLeft:"auto", fontSize:10.5, color:"var(--muted)"}}>{m.githubCard.language||""}</span></div>
                               <div className="github-card-body">
-                                <img src={m.githubCard.ownerAvatar} alt="" className="github-card-avatar"/>
+                                <img loading="lazy" decoding="async" src={m.githubCard.ownerAvatar} alt="" className="github-card-avatar"/>
                                 <div style={{flex:1, minWidth:0}}>
                                   <div className="github-card-title">{m.githubCard.fullName}</div>
                                   {m.githubCard.description && <div className="github-card-desc">{m.githubCard.description}</div>}
@@ -2596,7 +2598,7 @@ export default function Home(){
                           )}
                           {m.musicCard && (
                             <div className="music-card">
-                              <img src={m.musicCard.artworkUrl} alt="" className="music-card-art"/>
+                              <img loading="lazy" decoding="async" src={m.musicCard.artworkUrl} alt="" className="music-card-art"/>
                               <div style={{flex:1, minWidth:0}}>
                                 <div className="music-card-title">{m.musicCard.trackName}</div>
                                 <div className="music-card-artist">{m.musicCard.artistName} • {m.musicCard.collectionName}</div>
@@ -2654,7 +2656,7 @@ export default function Home(){
                 {pendingFile && (
                   <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:"6px 8px", marginBottom:6, display:"flex", alignItems:"center", gap:8}}>
                     {pendingFile.preview ? (
-                      <img src={pendingFile.preview} alt="" style={{width:36, height:36, objectFit:"cover", border:"1px solid var(--border)"}}/>
+                      <img loading="lazy" decoding="async" src={pendingFile.preview} alt="" style={{width:36, height:36, objectFit:"cover", border:"1px solid var(--border)"}}/>
                     ) : (
                       <div style={{width:36, height:36, border:"1px solid var(--border)", display:"grid", placeItems:"center", color:"var(--muted)"}}><span className="icon">{attachmentKind(pendingFile.file)==="video" ? <Icon name="cam" size={16}/> : attachmentKind(pendingFile.file)==="audio" ? <Icon name="music" size={16}/> : <Icon name="paperclip" size={16}/>}</span></div>
                     )}
@@ -2725,7 +2727,7 @@ export default function Home(){
             )}
 
             {showEmoji && <div className="picker"><div className="picker-title">EMOJİ <button onClick={()=>setShowEmoji(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div><div className="emoji-grid">{EMOJIS.map(e=><button key={e} onClick={()=>{updateDraft(draft + e); setShowEmoji(false);}}>{e}</button>)}</div></div>}
-            {showGif && <div className="picker"><div className="picker-title">GIF <button onClick={()=>setShowGif(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div><div className="picker-search"><input value={gifSearch} onChange={e=>setGifSearch(e.target.value)} onKeyDown={e=> e.key==="Enter" && searchGifs()} placeholder="ara..." /><button onClick={searchGifs}>ARA</button></div><div className="gif-grid">{gifResults.map(u=><button key={u} onClick={()=>{updateDraft(draft + " " + u); setShowGif(false);}}><img src={u} alt="gif" /></button>)}{gifResults.length===0 && <div style={{gridColumn:"1 / -1", fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:8, border:"1px dashed var(--border)", textAlign:"center"}}>giphy — API boşsa çalışmaz</div>}</div></div>}
+            {showGif && <div className="picker"><div className="picker-title">GIF <button onClick={()=>setShowGif(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div><div className="picker-search"><input value={gifSearch} onChange={e=>setGifSearch(e.target.value)} onKeyDown={e=> e.key==="Enter" && searchGifs()} placeholder="ara..." /><button onClick={searchGifs}>ARA</button></div><div className="gif-grid">{gifResults.map(u=><button key={u} onClick={()=>{updateDraft(draft + " " + u); setShowGif(false);}}><img loading="lazy" decoding="async" src={u} alt="gif" /></button>)}{gifResults.length===0 && <div style={{gridColumn:"1 / -1", fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", padding:8, border:"1px dashed var(--border)", textAlign:"center"}}>giphy — API boşsa çalışmaz</div>}</div></div>}
 
             {showThread && (
               <div className="thread-drawer">
@@ -2778,7 +2780,7 @@ export default function Home(){
                 <div className="member-group-title">ÇEVRİMİÇİ — {members.length}</div>
                 {members.map(m=>(
                   <div key={m.uid} className="member-row" style={{alignItems:"flex-start", cursor:"pointer"}} onClick={()=>openProfile(m.uid)}>
-                    <div className="m-av" role="button" tabIndex={0} onKeyDown={(e)=>{if(e.key==="Enter"||e.key===" "){e.preventDefault(); openProfile(m.uid);}}} style={{cursor:"pointer", display:"grid", placeItems:"center"}}>{m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}<i className="status-dot online"/></div>
+                    <div className="m-av" role="button" tabIndex={0} onKeyDown={(e)=>{if(e.key==="Enter"||e.key===" "){e.preventDefault(); openProfile(m.uid);}}} style={{cursor:"pointer", display:"grid", placeItems:"center"}}>{m.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}<i className="status-dot online"/></div>
                     <div style={{flex:1, minWidth:0}}><div className="m-name">{m.profile?.displayName||m.profile?.username}</div><small>{m.role}</small>{m.profile?.nowPlaying && <small style={{display:"flex", alignItems:"center", gap:4, color:"var(--spotify)", marginTop:2}}><span className="icon"><Icon name="music" size={10}/></span><span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile.nowPlaying.track} — {m.profile.nowPlaying.artist}</span></small>}</div>
                   </div>
                 ))}
@@ -2794,7 +2796,7 @@ export default function Home(){
             <div className="modal-head"><span>SUNUCU OLUŞTUR</span><button onClick={()=>setShowCreateServer(false)}><span className="icon"><Icon name="close" size={12}/></span></button></div>
             <div className="modal-body">
               <div className="icon-upload">
-                {newServerIcon ? <img src={newServerIcon} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
+                {newServerIcon ? <img loading="lazy" decoding="async" src={newServerIcon} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
                 <label className="icon-upload-btn">FOTOĞRAF SEÇ<input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>setNewServerIcon(String(r.result)); r.readAsDataURL(f);}} /></label>
                 {newServerIcon && <button className="icon-upload-btn" onClick={()=>setNewServerIcon("")}>KALDIR</button>}
               </div>
@@ -2931,7 +2933,7 @@ export default function Home(){
                 <div style={{display:"flex", flexDirection:"column", gap:6, maxHeight:"46vh", overflow:"auto"}}>
                   {friends.map(f=>(
                     <div key={f.uid} className="friend-row" style={{marginBottom:0}}>
-                      <span className="avatar" style={{border:"1px solid var(--border)", background:"var(--surface-3)", overflow:"hidden", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</span>
+                      <span className="avatar" style={{border:"1px solid var(--border)", background:"var(--surface-3)", overflow:"hidden", flex:"0 0 auto"}}>{f.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={f.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(f.profile?.displayName||f.profile?.username||"??")}</span>
                       <div style={{flex:1, minWidth:0}}>
                         <div data-friend-name style={{fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.profile?.displayName||f.profile?.username||f.uid.slice(0,6)}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>@{f.profile?.username}</div>
@@ -2960,7 +2962,7 @@ export default function Home(){
               <div style={{display:"flex", flexDirection:"column", gap:8}}>
                 {servers.filter(s=>s.id!=="demo" && myServerIds[s.id]).map(s=>(
                   <button key={s.id} className={`friend-row ${inviteFriendServer===s.id?"invite-selected":""}`} onClick={()=>setInviteFriendServer(s.id)} style={{cursor:"pointer", width:"100%", textAlign:"left"}}>
-                    <span className="avatar" style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", overflow:"hidden"}}>{s.iconUrl ? <img src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(s.name)}</span>
+                    <span className="avatar" style={{cursor:"pointer", border:"1px solid var(--border)", background:"var(--surface-3)", overflow:"hidden"}}>{s.iconUrl ? <img loading="lazy" decoding="async" src={s.iconUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(s.name)}</span>
                     <span style={{flex:1, fontWeight:600, fontSize:13}}>{s.name}</span>
                     <span className="invite-radio">{inviteFriendServer===s.id ? "◉" : "○"}</span>
                   </button>
@@ -2983,8 +2985,8 @@ export default function Home(){
               <div style={{display:"flex", flexDirection:"column", gap:14}}>
                 <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:10, display:"flex", gap:10, alignItems:"center"}}>
                   <div style={{width:48, height:48, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", position:"relative", flex:"0 0 auto", borderRadius:"50%"}}>
-                    <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}</div>
-                    {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
+                    <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{profile?.avatarUrl ? <img loading="lazy" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}</div>
+                    {profile?.decoration && profile.decoration.startsWith("http") && <img loading="lazy" decoding="async" src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-8, width:"calc(100% + 16px)", height:"calc(100% + 16px)", pointerEvents:"none", objectFit:"contain", display:"block"}}/>}
                     {profile?.decoration && !profile.decoration.startsWith("http") && <div style={{position:"absolute", inset:-2, border:"2px solid var(--accent)", borderRadius: profile.decoration==="circle" ? "50%" : "0"}}/>}
                   </div>
                   <div style={{flex:1, minWidth:0}}>
@@ -3137,8 +3139,8 @@ export default function Home(){
                   <div style={{display:"flex", flexDirection:"column", gap:14}}>
                     <div style={{border:"1px solid var(--border)", background:"var(--surface-2)", padding:12, display:"flex", gap:12, alignItems:"center", minWidth:0}}>
                       <div style={{width:64, height:64, minWidth:64, border:"1px solid var(--border)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"hidden", position:"relative", flex:"0 0 auto"}}>
-                        {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}
-                        {profile?.decoration && profile.decoration.startsWith("http") && <img src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
+                        {profile?.avatarUrl ? <img loading="lazy" decoding="async" src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:700}}>{initials(profile?.displayName ?? username)}</span>}
+                        {profile?.decoration && profile.decoration.startsWith("http") && <img loading="lazy" decoding="async" src={profile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-6, width:"calc(100% + 12px)", height:"calc(100% + 12px)", pointerEvents:"none"}}/>}
                       </div>
                       <div style={{flex:1, minWidth:0, overflow:"hidden"}}>
                         <div style={{fontWeight:700, overflowWrap:"anywhere"}}>{profile?.displayName}</div>
@@ -3182,7 +3184,7 @@ export default function Home(){
                       <div style={{fontSize:11, color:"var(--spotify)", marginTop:4}}>iTunes Search (ücretsiz/keysiz) ile ara, profile yazılır — server'a mesaj gitmez.</div>
                       {profile?.nowPlaying && (
                         <div style={{marginTop:8, border:"1px solid var(--spotify)", background:"var(--bg)", padding:8, display:"flex", gap:8, alignItems:"center"}}>
-                          {profile.nowPlaying.artwork && <img src={profile.nowPlaying.artwork} alt="" style={{width:40, height:40, flex:"0 0 auto"}}/>}
+                          {profile.nowPlaying.artwork && <img loading="lazy" decoding="async" src={profile.nowPlaying.artwork} alt="" style={{width:40, height:40, flex:"0 0 auto"}}/>}
                           <div style={{flex:1, minWidth:0}}>
                             <div style={{fontSize:12, fontWeight:700, overflowWrap:"anywhere"}}>{profile.nowPlaying.track}</div>
                             <div style={{fontSize:11, color:"var(--muted)", overflowWrap:"anywhere"}}>{profile.nowPlaying.artist}</div>
@@ -3198,7 +3200,7 @@ export default function Home(){
                         <div style={{marginTop:8, display:"flex", flexDirection:"column", gap:6}}>
                           {npResults.length===0 ? <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", border:"1px dashed var(--border)", padding:8, textAlign:"center"}}>sonuç yok</div> : npResults.map(c=>(
                             <div key={c.trackViewUrl} style={{display:"flex", gap:8, alignItems:"center", border:"1px solid var(--border)", background:"var(--bg)", padding:6}}>
-                              <img src={c.artworkUrl} alt="" style={{width:36, height:36, flex:"0 0 auto"}}/>
+                              <img loading="lazy" decoding="async" src={c.artworkUrl} alt="" style={{width:36, height:36, flex:"0 0 auto"}}/>
                               <div style={{flex:1, minWidth:0}}>
                                 <div style={{fontSize:12, fontWeight:700, overflowWrap:"anywhere"}}>{c.trackName}</div>
                                 <div style={{fontSize:11, color:"var(--muted)", overflowWrap:"anywhere"}}>{c.artistName} • {c.collectionName}</div>
@@ -3281,7 +3283,7 @@ export default function Home(){
                   {canManage && (
                     <>
                       <div className="icon-upload">
-                        {selectedServerData?.iconUrl ? <img src={selectedServerData.iconUrl} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
+                        {selectedServerData?.iconUrl ? <img loading="lazy" decoding="async" src={selectedServerData.iconUrl} alt=""/> : <span className="icon"><Icon name="grid" size={22}/></span>}
                         <label className="icon-upload-btn">FOTOĞRAF<input type="file" accept="image/*" hidden onChange={e=>{const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ update(ref(db,`servers/${selectedServer}`),{iconUrl:String(r.result)}).catch(()=>{}); setToast("güncellendi"); }; r.readAsDataURL(f);}} /></label>
                       </div>
                       <label>SUNUCU ADI</label>
@@ -3293,7 +3295,7 @@ export default function Home(){
                   )}
                   {!canManage && (
                     <div style={{border:"1px solid var(--border)", padding:10, background:"var(--surface-2)", display:"flex", gap:10, alignItems:"center"}}>
-                      {selectedServerData?.iconUrl ? <img src={selectedServerData.iconUrl} alt="" style={{width:40, height:40, border:"1px solid var(--border)"}}/> : <span style={{width:40, height:40, display:"grid", placeItems:"center", border:"1px solid var(--border)", background:"var(--bg)"}}><span className="icon"><Icon name="grid" size={16}/></span></span>}
+                      {selectedServerData?.iconUrl ? <img loading="lazy" decoding="async" src={selectedServerData.iconUrl} alt="" style={{width:40, height:40, border:"1px solid var(--border)"}}/> : <span style={{width:40, height:40, display:"grid", placeItems:"center", border:"1px solid var(--border)", background:"var(--bg)"}}><span className="icon"><Icon name="grid" size={16}/></span></span>}
                       <div>
                         <div style={{fontWeight:700}}>{selectedServerData?.name}</div>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)"}}>ID: {selectedServer} • {members.length} üye</div>
@@ -3342,7 +3344,7 @@ export default function Home(){
                       {members.map(m=>(
                         <div key={m.uid} style={{display:"flex", alignItems:"center", gap:8, border:"1px solid var(--border)", background:"var(--bg)", padding:"5px 8px"}}>
                           <div style={{width:22, height:22, borderRadius:"50%", background:"var(--surface-3)", color:"var(--text)", display:"grid", placeItems:"center", fontSize:10.5, fontWeight:700, overflow:"hidden"}}>
-                            {m.profile?.avatarUrl ? <img src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}
+                            {m.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={m.profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : initials(m.profile?.displayName||m.profile?.username||"??")}
                           </div>
                           <span style={{flex:1, minWidth:0, fontFamily:"var(--font-mono)", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.profile?.displayName||m.profile?.username||m.uid.slice(0,6)}</span>
                           {canManage && m.uid!==user?.uid ? (
@@ -3387,8 +3389,8 @@ export default function Home(){
             </div>
             <div className="modal-body" style={{paddingTop:48, position:"relative", textAlign:"left", overflow:"visible"}}>
               <div style={{position:"absolute", top:-32, left:16, width:68, height:68, border:"2px solid var(--accent)", background:"var(--bg)", display:"grid", placeItems:"center", overflow:"visible", borderRadius:"50%", boxShadow:"0 2px 8px rgba(0,0,0,.4)"}}>
-                <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{selectedProfile?.avatarUrl ? <img src={selectedProfile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800}}>{selectedProfile ? initials(selectedProfile.displayName||selectedProfile.username) : "??"}</span>}</div>
-                {selectedProfile?.decoration && selectedProfile.decoration.startsWith("http") && <img src={selectedProfile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/>}
+                <div style={{width:"100%", height:"100%", borderRadius:"50%", overflow:"hidden", display:"grid", placeItems:"center"}}>{selectedProfile?.avatarUrl ? <img loading="lazy" decoding="async" src={selectedProfile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontFamily:"var(--font-mono)", fontWeight:800}}>{selectedProfile ? initials(selectedProfile.displayName||selectedProfile.username) : "??"}</span>}</div>
+                {selectedProfile?.decoration && selectedProfile.decoration.startsWith("http") && <img loading="lazy" decoding="async" src={selectedProfile.decoration} alt="" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display="none"}} style={{position:"absolute", inset:-10, width:"calc(100% + 20px)", height:"calc(100% + 20px)", pointerEvents:"none"}}/>}
               </div>
               <div style={{position:"absolute", top:-32, right:16, display:"flex", gap:4}}>
                 {(selectedProfile?.badges||[]).map(b=> <span key={b} style={{background:"var(--accent)", color:"var(--accent-fg)", border:"1px solid #000", fontFamily:"var(--font-mono)", fontSize:10.5, fontWeight:700, padding:"2px 5px"}}>{b}</span>)}
@@ -3404,7 +3406,7 @@ export default function Home(){
                   <div style={{fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)"}}>@{selectedProfile.username} • {selectedProfile.customStatusEmoji || ""} {selectedProfile.customStatus || selectedProfile.statusText || ""}</div>
                   {selectedProfile.nowPlaying && (
                     <div style={{marginTop:10, border:"1px solid var(--spotify)", background:"rgba(29,185,84,.08)", padding:8, display:"flex", gap:8, alignItems:"center"}}>
-                      {selectedProfile.nowPlaying.artwork && <img src={selectedProfile.nowPlaying.artwork} alt="" style={{width:40, height:40, border:"1px solid var(--spotify)", flex:"0 0 auto"}}/>}
+                      {selectedProfile.nowPlaying.artwork && <img loading="lazy" decoding="async" src={selectedProfile.nowPlaying.artwork} alt="" style={{width:40, height:40, border:"1px solid var(--spotify)", flex:"0 0 auto"}}/>}
                       <div style={{flex:1, minWidth:0}}>
                         <div style={{fontFamily:"var(--font-mono)", fontSize:10.5, color:"var(--spotify)", fontWeight:700, letterSpacing:".08em", display:"flex", alignItems:"center", gap:6}}><span className="icon"><Icon name="music" size={12}/></span> ŞU AN DİNLİYOR</div>
                         <div style={{fontSize:12, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{selectedProfile.nowPlaying.track}</div>
@@ -3455,7 +3457,7 @@ export default function Home(){
               <span>{lightbox.name}</span>
               <button onClick={()=>setLightbox(null)} style={{border:"1px solid var(--accent)", background:"var(--bg)", color:"var(--text)", width:26, height:26}}><span className="icon"><Icon name="close" size={12}/></span></button>
             </div>
-            <img src={lightbox.src} alt={lightbox.name} style={{maxWidth:"92vw", maxHeight:"82vh", border:"2px solid var(--accent)", objectFit:"contain"}}/>
+            <img loading="lazy" decoding="async" src={lightbox.src} alt={lightbox.name} style={{maxWidth:"92vw", maxHeight:"82vh", border:"2px solid var(--accent)", objectFit:"contain"}}/>
           </div>
         </div>
       )}
@@ -3489,7 +3491,7 @@ export default function Home(){
                   display:"grid",
                   placeItems:"center"
                 }}>
-                <img src={cropTarget.url} alt="preview" draggable={false}
+                <img loading="lazy" decoding="async" src={cropTarget.url} alt="preview" draggable={false}
                   style={{
                     position:"absolute", left:"50%", top:"50%",
                     width: cropTarget.type==="avatar" ? 280 : "100%",
@@ -3669,7 +3671,7 @@ export default function Home(){
                           <div className="call-stage-mini">
                             {Object.entries(voiceParticipants).filter(([uid])=> uid!==featured.uid).map(([uid, info])=>(
                               <div key={uid} className="call-card mini">
-                                <div className="call-avatar">{info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
+                                <div className="call-avatar">{info.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
                                 <div className="call-name">{info.profile?.displayName || info.profile?.username || uid.slice(0,6)}</div>
                               </div>
                             ))}
@@ -3682,7 +3684,7 @@ export default function Home(){
                     <>
                 <div className={`call-card ${micMuted?"muted":""}`}>
                   <div className="call-video-box">
-                    {screenSharing && screenStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && screenStreamRef.current){ el.muted = true; el.srcObject = screenStreamRef.current; void el.play().catch(()=>{}); } }}/> : camOn && camStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && camStreamRef.current){ el.muted = true; el.srcObject = camStreamRef.current; void el.play().catch(()=>{}); } }}/> : <div className="call-avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>}
+                    {screenSharing && screenStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && screenStreamRef.current){ el.muted = true; el.srcObject = screenStreamRef.current; void el.play().catch(()=>{}); } }}/> : camOn && camStreamRef.current ? <video autoPlay playsInline muted ref={el=>{ if(el && camStreamRef.current){ el.muted = true; el.srcObject = camStreamRef.current; void el.play().catch(()=>{}); } }}/> : <div className="call-avatar">{profile?.avatarUrl ? <img loading="lazy" decoding="async" src={profile.avatarUrl} alt="" /> : initials(profile?.displayName ?? username)}</div>}
                   </div>
                   <div className="call-name">Sen {screenSharing ? "— ekran paylaşımı" : ""}</div>
                   <div className="call-status"><span className="icon"><Icon name={micMuted?"micOff":"mic"} size={11}/></span> {micMuted ? "sessiz" : "konuşuyor"}</div>
@@ -3693,7 +3695,7 @@ export default function Home(){
                       {remoteCamStatus[uid] && remoteStreams[uid] ? (
                         <video autoPlay playsInline muted ref={el=>{ if(el && remoteStreams[uid]){ el.muted = true; el.srcObject = remoteStreams[uid]; void el.play().catch(()=>{}); } }}/>
                       ) : (
-                        <div className="call-avatar">{info.profile?.avatarUrl ? <img src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
+                        <div className="call-avatar">{info.profile?.avatarUrl ? <img loading="lazy" decoding="async" src={info.profile.avatarUrl} alt="" /> : initials(info.profile?.displayName || info.profile?.username || "??")}</div>
                       )}
                     </div>
                     <div className="call-name">{info.profile?.displayName || info.profile?.username || uid.slice(0,6)}</div>

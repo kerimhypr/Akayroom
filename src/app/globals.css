@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap'); /* display=swap added via URL for non-blocking render */
 
 /* ============================================================
    AKAYROOM — TASARIM TOKENLARI v2
@@ -100,6 +100,17 @@ html { scroll-behavior: smooth; }
 
 /* --- Sayılar zaman hizası --- */
 .msg-time, .group-time, .call-status, .cu-meta small { font-variant-numeric: tabular-nums; }
+
+/* --- Performans: içerik görünürlük ve katman optimizasyonu --- */
+.message-row { content-visibility: auto; contain-intrinsic-size: auto 44px; contain: layout paint style; }
+.message-row.grouped { contain-intrinsic-size: auto 22px; }
+.auth-card, .modal, .picker { will-change: transform; }
+.message-area { contain: layout paint; }
+/* GPU hızlandırma: hover transform'ları sadece compositing layer'de */
+.server-icon, .channel-row, .dm-item, .member-row, .btn, .msg-avatar { will-change: auto; }
+@media (max-width:760px){
+  .message-row { content-visibility: visible; /* mobilde virtualization kapalı, scroll jank önlemi */ }
+}
 
 /* --- Hareket duyarlılığı --- */
 @media (prefers-reduced-motion: reduce) {
